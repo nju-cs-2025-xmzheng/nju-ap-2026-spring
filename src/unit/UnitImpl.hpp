@@ -1,9 +1,41 @@
 #pragma once
 
+#include "unit/Equipment.hpp"
 #include "unit/Synergy.hpp"
 #include <algorithm>
 
 namespace Synera::unit {
+
+inline void tag_invoke(__tag::apply_equipment_t, const PyroDrop &,
+                       UnitStats &s) {
+    s.atk += 15;
+}
+
+inline void tag_invoke(__tag::apply_equipment_t, const HydroDrop &,
+                       UnitStats &s) {
+    s.max_hp += 150;
+    s.hp += 150;
+}
+
+inline void tag_invoke(__tag::apply_equipment_t, const AnemoDrop &,
+                       UnitStats &s) {
+    s.max_mana = std::max(10, s.max_mana - 30);
+}
+
+inline void tag_invoke(__tag::apply_equipment_t, const GeoDrop &,
+                       UnitStats &s) {
+    s.shield += 100;
+}
+
+inline void tag_invoke(__tag::apply_equipment_t, const ElectroDrop &,
+                       UnitStats &) {
+    // Double-strike is handled in normal_attack logic
+}
+
+inline void tag_invoke(__tag::apply_equipment_t, const CryoDrop &,
+                       UnitStats &) {
+    // Damage reduction is handled in take_damage logic
+}
 
 template <typename SlimeType>
 inline std::optional<engine::HexCoord>
@@ -53,36 +85,40 @@ inline void tag_invoke(__tag::cast_skill_t, HydroSlime &u, engine::Board &board,
 // Heals the lowest HP ally on the board instead of dealing damage
 inline void tag_invoke(__tag::normal_attack_t, HydroSlime &u,
                        engine::Board &board, engine::HexCoord target) {
-    std::shared_ptr<Unit> lowest_ally = nullptr;
-    int min_hp = 999999;
+    int repeat = std::holds_alternative<ElectroDrop>(u.stats_.equipped) ? 2 : 1;
+    for (int i = 0; i < repeat; ++i) {
+        std::shared_ptr<Unit> lowest_ally = nullptr;
+        int min_hp = 999999;
 
-    // Find the ally (belonging to same owner) on the board with the lowest HP
-    for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
-        for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
-            engine::HexCoord cell{r, c};
-            if (auto ally_ptr = engine::get_unit(board, cell)) {
-                if (stats(*ally_ptr).owner == u.stats_.owner &&
-                    stats(*ally_ptr).hp > 0) {
-                    if (stats(*ally_ptr).hp < min_hp) {
-                        min_hp = stats(*ally_ptr).hp;
-                        lowest_ally = ally_ptr;
+        // Find the ally (belonging to same owner) on the board with the lowest
+        // HP
+        for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
+            for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+                engine::HexCoord cell{r, c};
+                if (auto ally_ptr = engine::get_unit(board, cell)) {
+                    if (stats(*ally_ptr).owner == u.stats_.owner &&
+                        stats(*ally_ptr).hp > 0) {
+                        if (stats(*ally_ptr).hp < min_hp) {
+                            min_hp = stats(*ally_ptr).hp;
+                            lowest_ally = ally_ptr;
+                        }
                     }
                 }
             }
         }
-    }
 
-    if (lowest_ally) {
-        auto &ally_stats = stats(*lowest_ally);
-        ally_stats.hp =
-            std::min(ally_stats.hp + u.stats_.atk, ally_stats.max_hp);
-    }
+        if (lowest_ally) {
+            auto &ally_stats = stats(*lowest_ally);
+            ally_stats.hp =
+                std::min(ally_stats.hp + u.stats_.atk, ally_stats.max_hp);
+        }
 
-    // Mana gain
-    u.stats_.mana += 10;
-    if (u.stats_.mana >= u.stats_.max_mana) {
-        u.stats_.mana = 0;
-        cast_skill(u, board, target);
+        // Mana gain
+        u.stats_.mana += 10;
+        if (u.stats_.mana >= u.stats_.max_mana) {
+            u.stats_.mana = 0;
+            cast_skill(u, board, target);
+        }
     }
 }
 
@@ -188,30 +224,38 @@ template <typename T, typename B, typename C>
 inline constexpr void tag_invoke(__tag::normal_attack_t, T &&a, B &&board,
                                  C &&target) {
     if (auto target_unit = engine::get_unit(board, target)) {
-        deal_damage(board, a, *target_unit, stats(a).atk);
         auto &s = stats(a);
+        int repeat = std::holds_alternative<ElectroDrop>(s.equipped) ? 2 : 1;
 
-        // High Voltage (Electro Resonance): normal attack mana gain +5 (total
-        // 15) for Electro units
-        int mana_gain = 10;
-        auto synergies = compute_synergies(board);
-        if (synergies.high_voltage && element(a) == Element::Electro) {
-            mana_gain = 15;
-        }
-        s.mana += mana_gain;
-
-        // Shattering Ice (Cryo Resonance): normal attacks of Cryo units have
-        // 20% chance to freeze (stun for 1 tick)
-        if (synergies.shattering_ice && element(a) == Element::Cryo) {
-            if (std::rand() % 100 < 20) {
-                stats(*target_unit).state = State::Idle;
+        for (int i = 0; i < repeat; ++i) {
+            // Stop if target is dead on second hit
+            if (stats(*target_unit).hp <= 0) {
+                break;
             }
-        }
+            deal_damage(board, a, *target_unit, s.atk);
 
-        if (s.mana >= s.max_mana) {
-            s.mana = 0;
-            cast_skill(std::forward<T>(a), std::forward<B>(board),
-                       std::forward<C>(target));
+            // High Voltage (Electro Resonance): normal attack mana gain +5
+            // (total 15) for Electro units
+            int mana_gain = 10;
+            auto synergies = compute_synergies(board);
+            if (synergies.high_voltage && element(a) == Element::Electro) {
+                mana_gain = 15;
+            }
+            s.mana += mana_gain;
+
+            // Shattering Ice (Cryo Resonance): normal attacks of Cryo units
+            // have 20% chance to freeze (stun for 1 tick)
+            if (synergies.shattering_ice && element(a) == Element::Cryo) {
+                if (std::rand() % 100 < 20) {
+                    stats(*target_unit).state = State::Idle;
+                }
+            }
+
+            if (s.mana >= s.max_mana) {
+                s.mana = 0;
+                cast_skill(std::forward<T>(a), std::forward<B>(board),
+                           std::forward<C>(target));
+            }
         }
     }
 }

@@ -2,6 +2,7 @@
 
 #include "common/__cpo.hpp"
 #include "engine/Coord.hpp"
+#include "unit/Types.hpp"
 #include <string>
 #include <utility>
 #include <variant>
@@ -27,6 +28,7 @@ struct UnitStats {
     int mana = 0;
     int level = 1;
     int shield = 0;
+    Equipment equipped = std::monostate{};
 };
 
 struct PyroSlime;
@@ -119,10 +121,12 @@ struct normal_attack_fn {
 inline constexpr __fn::take_damage_fn take_damage{};
 inline constexpr __fn::normal_attack_fn normal_attack{};
 
-// Default implementation of take_damage
 template <typename T>
 constexpr void tag_invoke(__tag::take_damage_t, T &&a, int amount) {
     auto &s = stats(a);
+    if (std::holds_alternative<CryoDrop>(s.equipped)) {
+        amount = int(amount * 0.90);
+    }
     if (s.shield > 0) {
         if (amount <= s.shield) {
             s.shield -= amount;
@@ -297,44 +301,34 @@ struct CryoSlime {
                            engine::Board &board, engine::HexCoord target);
 };
 
-template <typename... Ts>
-constexpr const UnitStats &tag_invoke(__tag::stats_t,
-                                      const std::variant<Ts...> &v) noexcept {
+constexpr const UnitStats &tag_invoke(__tag::stats_t, const Unit &v) noexcept {
     return std::visit(
         [](const auto &u) -> const UnitStats & { return stats(u); }, v);
 }
 
-template <typename... Ts>
-constexpr UnitStats &tag_invoke(__tag::stats_t,
-                                std::variant<Ts...> &v) noexcept {
+constexpr UnitStats &tag_invoke(__tag::stats_t, Unit &v) noexcept {
     return std::visit([](auto &u) -> UnitStats & { return stats(u); }, v);
 }
 
-template <typename... Ts>
-std::string tag_invoke(__tag::name_t, const std::variant<Ts...> &v) noexcept {
+inline std::string tag_invoke(__tag::name_t, const Unit &v) noexcept {
     return std::visit([](const auto &u) -> std::string { return name(u); }, v);
 }
 
-template <typename... Ts>
-constexpr Element tag_invoke(__tag::element_t,
-                             const std::variant<Ts...> &v) noexcept {
+constexpr Element tag_invoke(__tag::element_t, const Unit &v) noexcept {
     return std::visit([](const auto &u) -> Element { return element(u); }, v);
 }
 
-template <typename... Ts, typename B, typename C>
-void tag_invoke(__tag::cast_skill_t, std::variant<Ts...> &v, B &&board,
-                C &&target) {
+template <typename B, typename C>
+void tag_invoke(__tag::cast_skill_t, Unit &v, B &&board, C &&target) {
     std::visit([&board, &target](auto &u) { cast_skill(u, board, target); }, v);
 }
 
-template <typename... Ts>
-void tag_invoke(__tag::take_damage_t, std::variant<Ts...> &v, int amount) {
+inline void tag_invoke(__tag::take_damage_t, Unit &v, int amount) {
     std::visit([amount](auto &u) { take_damage(u, amount); }, v);
 }
 
-template <typename... Ts, typename B, typename C>
-void tag_invoke(__tag::normal_attack_t, std::variant<Ts...> &v, B &&board,
-                C &&target) {
+template <typename B, typename C>
+void tag_invoke(__tag::normal_attack_t, Unit &v, B &&board, C &&target) {
     std::visit([&board, &target](auto &u) { normal_attack(u, board, target); },
                v);
 }

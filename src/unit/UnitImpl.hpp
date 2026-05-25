@@ -49,6 +49,43 @@ inline void tag_invoke(__tag::cast_skill_t, HydroSlime &u, engine::Board &board,
     }
 }
 
+// Hydro Slime Normal Attack: Healing Splash
+// Heals the lowest HP ally on the board instead of dealing damage
+inline void tag_invoke(__tag::normal_attack_t, HydroSlime &u,
+                       engine::Board &board, engine::HexCoord target) {
+    std::shared_ptr<Unit> lowest_ally = nullptr;
+    int min_hp = 999999;
+
+    // Find the ally (belonging to same owner) on the board with the lowest HP
+    for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
+        for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+            engine::HexCoord cell{r, c};
+            if (auto ally_ptr = engine::get_unit(board, cell)) {
+                if (stats(*ally_ptr).owner == u.stats_.owner &&
+                    stats(*ally_ptr).hp > 0) {
+                    if (stats(*ally_ptr).hp < min_hp) {
+                        min_hp = stats(*ally_ptr).hp;
+                        lowest_ally = ally_ptr;
+                    }
+                }
+            }
+        }
+    }
+
+    if (lowest_ally) {
+        auto &ally_stats = stats(*lowest_ally);
+        ally_stats.hp =
+            std::min(ally_stats.hp + u.stats_.atk, ally_stats.max_hp);
+    }
+
+    // Mana gain
+    u.stats_.mana += 10;
+    if (u.stats_.mana >= u.stats_.max_mana) {
+        u.stats_.mana = 0;
+        cast_skill(u, board, target);
+    }
+}
+
 // Anemo Slime Skill: Anemo Burst
 // Deals 1.5 * ATK Wind damage to all units in a straight line towards the
 // target
@@ -146,45 +183,36 @@ inline void tag_invoke(__tag::cast_skill_t, CryoSlime &u, engine::Board &board,
     }
 }
 
+// Default implementation of normal_attack
 template <typename T, typename B, typename C>
-inline constexpr void __fn::normal_attack_fn::operator()(T &&a, B &&board,
-                                                         C &&target) const {
-    if constexpr (requires {
-                      tag_invoke(__tag::normal_attack_t{}, std::forward<T>(a),
-                                 std::forward<B>(board),
-                                 std::forward<C>(target));
-                  }) {
-        tag_invoke(__tag::normal_attack_t{}, std::forward<T>(a),
-                   std::forward<B>(board), std::forward<C>(target));
-    } else {
-        if (auto target_unit = engine::get_unit(board, target)) {
-            deal_damage(board, a, *target_unit, stats(a).atk);
-            auto &s = stats(a);
+inline constexpr void tag_invoke(__tag::normal_attack_t, T &&a, B &&board,
+                                 C &&target) {
+    if (auto target_unit = engine::get_unit(board, target)) {
+        deal_damage(board, a, *target_unit, stats(a).atk);
+        auto &s = stats(a);
 
-            // High Voltage (Electro Resonance): normal attack mana gain +5
-            // (total 15) for Electro units
-            int mana_gain = 10;
-            auto synergies = compute_synergies(board);
-            if (synergies.high_voltage && element(a) == Element::Electro) {
-                mana_gain = 15;
-            }
-            s.mana += mana_gain;
+        // High Voltage (Electro Resonance): normal attack mana gain +5 (total
+        // 15) for Electro units
+        int mana_gain = 10;
+        auto synergies = compute_synergies(board);
+        if (synergies.high_voltage && element(a) == Element::Electro) {
+            mana_gain = 15;
+        }
+        s.mana += mana_gain;
 
-            // Shattering Ice (Cryo Resonance): normal attacks of Cryo units
-            // have 20% chance to freeze (stun for 1 tick)
-            if (synergies.shattering_ice && element(a) == Element::Cryo) {
-                if (std::rand() % 100 < 20) {
-                    stats(*target_unit).state = State::Idle;
-                }
+        // Shattering Ice (Cryo Resonance): normal attacks of Cryo units have
+        // 20% chance to freeze (stun for 1 tick)
+        if (synergies.shattering_ice && element(a) == Element::Cryo) {
+            if (std::rand() % 100 < 20) {
+                stats(*target_unit).state = State::Idle;
             }
+        }
 
-            if (s.mana >= s.max_mana) {
-                s.mana = 0;
-                cast_skill(std::forward<T>(a), std::forward<B>(board),
-                           std::forward<C>(target));
-            }
+        if (s.mana >= s.max_mana) {
+            s.mana = 0;
+            cast_skill(std::forward<T>(a), std::forward<B>(board),
+                       std::forward<C>(target));
         }
     }
 }
-
 } // namespace Synera::unit

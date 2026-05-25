@@ -18,7 +18,6 @@ struct ActiveSynergies {
     bool protective_canopy = false;  // 4+ unique elements: -15% damage taken
     // clang-format on
 
-    // Counts on the board
     int pyro_count = 0;
     int hydro_count = 0;
     int anemo_count = 0;
@@ -98,6 +97,7 @@ inline void apply_combat_synergies(engine::Board &board,
                         s.atk = int(s.atk * 1.25);
                     }
                     if (synergies.soothing_water) {
+                        s.max_hp = int(s.max_hp * 1.25);
                         s.hp = int(s.hp * 1.25);
                     }
                     if (synergies.impetuous_winds) {

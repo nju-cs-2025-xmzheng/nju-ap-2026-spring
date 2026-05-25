@@ -20,6 +20,7 @@ struct UnitStats {
     Owner owner = Owner::PlayerCtrl;
     State state = State::Idle;
     int hp = 0;
+    int max_hp = 0;
     int atk = 0;
     int range = 0;
     int max_mana = 0;
@@ -96,46 +97,53 @@ inline constexpr __fn::cast_skill_fn cast_skill{};
 namespace __fn {
 struct take_damage_fn {
     template <typename T>
-    constexpr void operator()(T &&a, int amount) const noexcept {
-        if constexpr (requires {
-                          tag_invoke(__tag::take_damage_t{}, std::forward<T>(a),
-                                     amount);
-                      }) {
-            tag_invoke(__tag::take_damage_t{}, std::forward<T>(a), amount);
-        } else {
-            auto &s = stats(a);
-            if (s.shield > 0) {
-                if (amount <= s.shield) {
-                    s.shield -= amount;
-                    return;
-                } else {
-                    amount -= s.shield;
-                    s.shield = 0;
-                }
-            }
-            s.hp -= amount;
-            if (s.hp <= 0) {
-                s.hp = 0;
-                s.state = State::Dead;
-            }
-        }
+    constexpr void operator()(T &&a, int amount) const
+        noexcept(noexcept(tag_invoke(__tag::take_damage_t{}, std::forward<T>(a),
+                                     amount))) {
+        tag_invoke(__tag::take_damage_t{}, std::forward<T>(a), amount);
     }
 };
 
 struct normal_attack_fn {
     template <typename T, typename B, typename C>
-    constexpr void operator()(T &&a, B &&board, C &&target) const;
+    constexpr void operator()(T &&a, B &&board, C &&target) const
+        noexcept(noexcept(tag_invoke(__tag::normal_attack_t{},
+                                     std::forward<T>(a), std::forward<B>(board),
+                                     std::forward<C>(target)))) {
+        tag_invoke(__tag::normal_attack_t{}, std::forward<T>(a),
+                   std::forward<B>(board), std::forward<C>(target));
+    }
 };
 } // namespace __fn
 
 inline constexpr __fn::take_damage_fn take_damage{};
 inline constexpr __fn::normal_attack_fn normal_attack{};
 
+// Default implementation of take_damage
+template <typename T>
+constexpr void tag_invoke(__tag::take_damage_t, T &&a, int amount) {
+    auto &s = stats(a);
+    if (s.shield > 0) {
+        if (amount <= s.shield) {
+            s.shield -= amount;
+            return;
+        } else {
+            amount -= s.shield;
+            s.shield = 0;
+        }
+    }
+    s.hp -= amount;
+    if (s.hp <= 0) {
+        s.hp = 0;
+        s.state = State::Dead;
+    }
+}
+
 struct PyroSlime {
     UnitStats stats_;
     constexpr PyroSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 350 * level, 35 * level, 1,
-                 60,    0,           level,       0} {}
+        : stats_{owner, State::Idle, 350 * level, 350 * level, 35 * level,
+                 1,     60,          0,           level,       0} {}
 
     friend constexpr const UnitStats &tag_invoke(__tag::stats_t,
                                                  const PyroSlime &u) noexcept {
@@ -160,8 +168,8 @@ struct PyroSlime {
 struct HydroSlime {
     UnitStats stats_;
     constexpr HydroSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 400 * level, 30 * level, 2,
-                 60,    0,           level,       0} {}
+        : stats_{owner, State::Idle, 400 * level, 400 * level, 30 * level,
+                 2,     60,          0,           level,       0} {}
 
     friend constexpr const UnitStats &tag_invoke(__tag::stats_t,
                                                  const HydroSlime &u) noexcept {
@@ -181,13 +189,15 @@ struct HydroSlime {
     }
     friend void tag_invoke(__tag::cast_skill_t, HydroSlime &u,
                            engine::Board &board, engine::HexCoord target);
+    friend void tag_invoke(__tag::normal_attack_t, HydroSlime &u,
+                           engine::Board &board, engine::HexCoord target);
 };
 
 struct AnemoSlime {
     UnitStats stats_;
     constexpr AnemoSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 300 * level, 40 * level, 3,
-                 50,    0,           level,       0} {}
+        : stats_{owner, State::Idle, 300 * level, 300 * level, 40 * level,
+                 3,     50,          0,           level,       0} {}
 
     friend constexpr const UnitStats &tag_invoke(__tag::stats_t,
                                                  const AnemoSlime &u) noexcept {
@@ -212,8 +222,8 @@ struct AnemoSlime {
 struct GeoSlime {
     UnitStats stats_;
     constexpr GeoSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 450 * level, 25 * level, 1,
-                 70,    0,           level,       200 * level} {}
+        : stats_{owner, State::Idle, 450 * level, 450 * level, 25 * level,
+                 1,     70,          0,           level,       200 * level} {}
 
     friend constexpr const UnitStats &tag_invoke(__tag::stats_t,
                                                  const GeoSlime &u) noexcept {
@@ -238,8 +248,8 @@ struct GeoSlime {
 struct ElectroSlime {
     UnitStats stats_;
     constexpr ElectroSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 320 * level, 38 * level, 2,
-                 60,    0,           level,       0} {}
+        : stats_{owner, State::Idle, 320 * level, 320 * level, 38 * level,
+                 2,     60,          0,           level,       0} {}
 
     friend constexpr const UnitStats &
     tag_invoke(__tag::stats_t, const ElectroSlime &u) noexcept {
@@ -264,8 +274,8 @@ struct ElectroSlime {
 struct CryoSlime {
     UnitStats stats_;
     constexpr CryoSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 380 * level, 32 * level, 2,
-                 60,    0,           level,       150 * level} {}
+        : stats_{owner, State::Idle, 380 * level, 380 * level, 32 * level,
+                 2,     60,          0,           level,       150 * level} {}
 
     friend constexpr const UnitStats &tag_invoke(__tag::stats_t,
                                                  const CryoSlime &u) noexcept {
@@ -315,6 +325,18 @@ template <typename... Ts, typename B, typename C>
 void tag_invoke(__tag::cast_skill_t, std::variant<Ts...> &v, B &&board,
                 C &&target) {
     std::visit([&board, &target](auto &u) { cast_skill(u, board, target); }, v);
+}
+
+template <typename... Ts>
+void tag_invoke(__tag::take_damage_t, std::variant<Ts...> &v, int amount) {
+    std::visit([amount](auto &u) { take_damage(u, amount); }, v);
+}
+
+template <typename... Ts, typename B, typename C>
+void tag_invoke(__tag::normal_attack_t, std::variant<Ts...> &v, B &&board,
+                C &&target) {
+    std::visit([&board, &target](auto &u) { normal_attack(u, board, target); },
+               v);
 }
 
 } // namespace Synera::unit

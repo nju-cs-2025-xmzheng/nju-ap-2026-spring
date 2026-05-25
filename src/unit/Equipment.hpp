@@ -11,8 +11,6 @@ namespace __tag {
 struct apply_equipment_t {};
 struct equip_t {};
 
-// std::monostate overloads placed in __tag namespace so they are found by ADL
-// when the argument is std::monostate
 inline std::string tag_invoke(name_t, std::monostate) { return "None"; }
 inline void tag_invoke(apply_equipment_t, std::monostate, UnitStats &) {}
 } // namespace __tag
@@ -40,7 +38,6 @@ struct equip_fn {
 inline constexpr __fn::apply_equipment_fn apply_equipment{};
 inline constexpr __fn::equip_fn equip{};
 
-// Name CPO overloads for drops
 inline std::string tag_invoke(__tag::name_t, const PyroDrop &) {
     return "Pyro Drop";
 }
@@ -60,7 +57,6 @@ inline std::string tag_invoke(__tag::name_t, const CryoDrop &) {
     return "Cryo Drop";
 }
 
-// Apply CPO declarations
 void tag_invoke(__tag::apply_equipment_t, const PyroDrop &, UnitStats &s);
 void tag_invoke(__tag::apply_equipment_t, const HydroDrop &, UnitStats &s);
 void tag_invoke(__tag::apply_equipment_t, const AnemoDrop &, UnitStats &s);
@@ -68,7 +64,6 @@ void tag_invoke(__tag::apply_equipment_t, const GeoDrop &, UnitStats &s);
 void tag_invoke(__tag::apply_equipment_t, const ElectroDrop &, UnitStats &s);
 void tag_invoke(__tag::apply_equipment_t, const CryoDrop &, UnitStats &s);
 
-// Default template implementations
 template <typename T>
 inline void tag_invoke(__tag::equip_t, T &&u, Equipment eq) {
     auto &s = stats(u);
@@ -76,7 +71,6 @@ inline void tag_invoke(__tag::equip_t, T &&u, Equipment eq) {
     apply_equipment(eq, s);
 }
 
-// Variant overloads
 inline void tag_invoke(__tag::apply_equipment_t, const Equipment &v,
                        UnitStats &stats) {
     std::visit([&stats](const auto &eq) { apply_equipment(eq, stats); }, v);

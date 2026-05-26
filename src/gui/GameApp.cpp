@@ -907,20 +907,20 @@ void GameApp::DrawGame3D() {
         } else if (v.move_time < 1.0f) {
             render_pos = Vector3Lerp(v.current_pos, v.target_pos, v.move_time);
             // vertical jump sine-wave
-            render_pos.y += sin(v.move_time * PI) * 0.7f;
+            render_pos.y += sin(v.move_time * PI) * 0.35f;
         } else {
             render_pos = v.target_pos;
         }
 
-        // Apply high-frequency hurt wobble
+        // Apply high-frequency hurt wobble (proportional to base scale)
         if (v.hurt_time < 1.0f) {
-            float wobble = sin(v.hurt_time * PI * 3.0f) * 0.12f;
+            float wobble = sin(v.hurt_time * PI * 3.0f) * base_scale * 0.2f;
             render_pos.x += wobble;
         }
 
         // Apply lunge attack offset
         if (v.attack_time < 1.0f) {
-            float attack_offset = sin(v.attack_time * PI) * 0.5f;
+            float attack_offset = sin(v.attack_time * PI) * 0.2f;
             render_pos = Vector3Add(render_pos,
                                     Vector3Scale(v.attack_dir, attack_offset));
         }
@@ -928,22 +928,22 @@ void GameApp::DrawGame3D() {
         // Apply scale factors (MC style squash and stretch)
         Vector3 visual_scale = {base_scale, base_scale, base_scale};
 
-        // Idle bounce scale
-        float bounce = sin(v.bounce_phase) * 0.06f;
+        // Idle bounce scale (proportional to base scale)
+        float bounce = sin(v.bounce_phase) * base_scale * 0.08f;
         visual_scale.y += bounce;
         visual_scale.x -= bounce * 0.5f;
         visual_scale.z -= bounce * 0.5f;
 
-        // Jump stretch or landing squash
+        // Jump stretch or landing squash (proportional to base scale)
         if (v.move_time < 1.0f) {
             float jump_factor = sin(v.move_time * PI);
-            visual_scale.y += jump_factor * 0.18f;
-            visual_scale.x -= jump_factor * 0.09f;
-            visual_scale.z -= jump_factor * 0.09f;
+            visual_scale.y += jump_factor * base_scale * 0.25f;
+            visual_scale.x -= jump_factor * base_scale * 0.125f;
+            visual_scale.z -= jump_factor * base_scale * 0.125f;
         } else if (v.move_time < 1.3f) {
             // Landing squash phase: t_land goes from 0.0 to 1.0
             float t_land = (v.move_time - 1.0f) / 0.3f;
-            float squash = sin(t_land * PI) * 0.14f;
+            float squash = sin(t_land * PI) * base_scale * 0.2f;
             visual_scale.y -= squash;
             visual_scale.x += squash * 0.5f;
             visual_scale.z += squash * 0.5f;
@@ -953,14 +953,14 @@ void GameApp::DrawGame3D() {
         if (v.cast_time < 1.0f) {
             float cast_factor = sin(v.cast_time * PI);
             visual_scale =
-                Vector3Scale(visual_scale, 1.0f + cast_factor * 0.4f);
+                Vector3Scale(visual_scale, 1.0f + cast_factor * 0.15f);
         }
 
         // Death shrink
         if (v.is_dead) {
             float death_factor = std::min(1.0f, v.death_time);
             visual_scale = Vector3Scale(visual_scale, 1.0f - death_factor);
-            render_pos.y -= death_factor * 0.4f;
+            render_pos.y -= death_factor * 0.2f;
         }
 
         // Stunned status check
@@ -1492,7 +1492,7 @@ void GameApp::DrawGame2D() {
             }
         } else if (v.move_time < 1.0f) {
             bar_3d_pos = Vector3Lerp(v.current_pos, v.target_pos, v.move_time);
-            bar_3d_pos.y += sin(v.move_time * PI) * 0.7f;
+            bar_3d_pos.y += sin(v.move_time * PI) * 0.35f;
         } else {
             bar_3d_pos = v.target_pos;
         }

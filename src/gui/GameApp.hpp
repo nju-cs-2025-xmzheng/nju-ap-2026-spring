@@ -1,12 +1,12 @@
 #pragma once
 
-#include "engine/GameSession.hpp"
 #include "engine/BattleEngine.hpp"
-#include "unit/UnitImpl.hpp"
+#include "engine/GameSession.hpp"
 #include "raylib.h"
+#include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <map>
-#include <vector>
 #include <string>
+#include <vector>
 
 namespace Synera::gui {
 
@@ -40,13 +40,13 @@ struct VisualProjectile {
 };
 
 class GameApp {
-public:
+  public:
     GameApp();
     ~GameApp();
 
     void Run();
 
-private:
+  private:
     void Update();
     void Draw();
 
@@ -69,10 +69,15 @@ private:
     // Draw helpers
     void DrawGame3D();
     void DrawGame2D();
-    void DrawSlime(const Vector3& pos, float scale, unit::Element elem, unit::Owner owner, float hurt_val, float cast_val, bool is_stunned);
-    void DrawHexCell(const Vector3& pos, Color color, bool highlight);
+    void DrawSlime(const Vector3 &pos, float scale, unit::Element elem,
+                   unit::Owner owner, float hurt_val, float cast_val,
+                   bool is_stunned);
+    void DrawHexCell(const Vector3 &pos, Color color, bool highlight);
+    void DrawGameText(const char *text, int posX, int posY, int fontSize,
+                      Color color, bool bold = false);
+    int MeasureGameText(const char *text, int fontSize, bool bold = false);
 
-private:
+  private:
     engine::GameSession session_;
     engine::BattleEngine battle_engine_;
 
@@ -85,7 +90,8 @@ private:
     engine::Board combat_board_;
     engine::Board prep_board_copy_; // to restore positions after combat
     float combat_tick_timer = 0.0f;
-    float combat_tick_interval = 1.0f / 60.0f; // 60 ticks per second (1 tick = 1 frame)
+    float combat_tick_interval =
+        1.0f / 60.0f; // 60 ticks per second (1 tick = 1 frame)
     int ticks_elapsed_ = 0;
     bool combat_result_announced_ = false;
     bool player_won_combat_ = false;
@@ -104,11 +110,14 @@ private:
     Vector3 target_cam_pos_;
     Vector3 target_cam_target_;
 
-    // 3D Models
+    // 3D Models and Fonts
     Model hex_model_;
-    
+    Font font_regular_;
+    Font font_bold_;
+
     // UI Notification/Status Message
-    std::string status_msg_ = "Preparation Phase - Drag and drop units to position them.";
+    std::string status_msg_ =
+        "Preparation Phase - Drag and drop units to position them.";
     float status_msg_timer_ = 0.0f;
 };
 

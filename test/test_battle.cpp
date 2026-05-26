@@ -1,6 +1,6 @@
 #include "engine/BattleEngine.hpp"
 #include "engine/Board.hpp"
-#include "unit/UnitImpl.hpp"
+#include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <cassert>
 #include <iostream>
 

@@ -1,6 +1,6 @@
 #include "unit/Equipment.hpp"
 #include "unit/Unit.hpp"
-#include "unit/UnitImpl.hpp"
+#include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <cassert>
 #include <iostream>
 

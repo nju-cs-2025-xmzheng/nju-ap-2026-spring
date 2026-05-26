@@ -1,7 +1,7 @@
 #include "engine/Board.hpp"
 #include "unit/Synergy.hpp"
 #include "unit/Unit.hpp"
-#include "unit/UnitImpl.hpp"
+#include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <cassert>
 #include <iostream>
 #include <memory>

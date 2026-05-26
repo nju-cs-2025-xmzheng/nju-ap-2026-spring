@@ -125,7 +125,7 @@ void GameApp::Run() {
 }
 
 Vector3 GameApp::GetHexWorldPos(engine::HexCoord coord) {
-    float spacing = 0.88f;
+    float spacing = 1.0f;
     float vertical_spacing = spacing * 0.866f; // spacing * sin(60)
 
     float cx = (coord.c + (coord.r & 1 ? 0.5f : 0.0f) - 3.5f) * spacing;
@@ -134,18 +134,20 @@ Vector3 GameApp::GetHexWorldPos(engine::HexCoord coord) {
 }
 
 Vector3 GameApp::GetBenchWorldPos(int slot) {
-    float spacing = 0.88f;
+    float spacing = 1.0f;
+    float vertical_spacing = spacing * 0.866f;
     // Position Bench in a horizontal line in front of the board (Z-forward)
     float cx = (slot - 3.5f) * spacing;
-    float cz = 3.6f;
+    float cz = 3.5f * vertical_spacing + 1.2f * spacing;
     return {cx, 0.0f, cz};
 }
 
 Vector3 GameApp::GetEquipWorldPos(int slot) {
-    float spacing = 0.88f;
+    float spacing = 1.0f;
+    float vertical_spacing = spacing * 0.866f;
     // Position Equipment pool below the bench
     float cx = (slot - 3.5f) * spacing;
-    float cz = 4.6f;
+    float cz = 3.5f * vertical_spacing + 1.2f * spacing + 1.0f * spacing;
     return {cx, 0.0f, cz};
 }
 
@@ -168,7 +170,7 @@ std::pair<engine::Coord, bool> GameApp::GetCellUnderMouse() {
     float t = -ray.position.y / ray.direction.y;
     Vector3 hit = Vector3Add(ray.position, Vector3Scale(ray.direction, t));
 
-    float min_dist = 0.55f; // click threshold
+    float min_dist = 0.6f; // click threshold
     engine::Coord best_coord;
     bool found = false;
 
@@ -494,7 +496,7 @@ void GameApp::HandleInputs() {
             for (int i = 0; i < 8; ++i) {
                 Vector3 pos = GetEquipWorldPos(i);
                 float dist = Vector2Distance({hit.x, hit.z}, {pos.x, pos.z});
-                if (dist < 0.44f) {
+                if (dist < 0.5f) {
                     hovered_equip_index_ = i;
                     break;
                 }

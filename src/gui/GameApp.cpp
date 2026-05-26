@@ -93,13 +93,20 @@ GameApp::GameApp() {
     hex_model_ = LoadModelFromMesh(hexMesh);
 
     // 4. Load Exo 2 Fonts (high-res load using LoadFontEx)
-    font_regular_ = LoadFontEx("Exo2-Regular.ttf", 48, NULL, 0);
+    font_regular_ = LoadFontEx("Exo2-Regular.ttf", 96, NULL, 0);
     if (font_regular_.texture.id == 0) {
-        font_regular_ = LoadFontEx("../Exo2-Regular.ttf", 48, NULL, 0);
+        font_regular_ = LoadFontEx("../Exo2-Regular.ttf", 96, NULL, 0);
     }
-    font_bold_ = LoadFontEx("Exo2-Bold.ttf", 48, NULL, 0);
+    font_bold_ = LoadFontEx("Exo2-Bold.ttf", 96, NULL, 0);
     if (font_bold_.texture.id == 0) {
-        font_bold_ = LoadFontEx("../Exo2-Bold.ttf", 48, NULL, 0);
+        font_bold_ = LoadFontEx("../Exo2-Bold.ttf", 96, NULL, 0);
+    }
+
+    if (font_regular_.texture.id != 0) {
+        SetTextureFilter(font_regular_.texture, TEXTURE_FILTER_BILINEAR);
+    }
+    if (font_bold_.texture.id != 0) {
+        SetTextureFilter(font_bold_.texture, TEXTURE_FILTER_BILINEAR);
     }
 }
 
@@ -1105,23 +1112,23 @@ void GameApp::DrawGame2D() {
     DrawRectangleLines(0, 0, 1280, 60, Color{40, 40, 50, 255});
 
     // Player HP
-    DrawGameText("PLAYER HP:", 30, 20, 20, LIGHTGRAY);
+    DrawGameText("PLAYER HP:", 30, 20, 22, LIGHTGRAY);
     DrawRectangle(150, 20, 200, 20, DARKGRAY);
     float hp_pct = session_.player_.hp / 100.0f;
     DrawRectangle(150, 20, (int)(200 * hp_pct), 20,
                   hp_pct > 0.4f ? GREEN : RED);
     std::string hp_text = std::to_string(session_.player_.hp) + "/100";
-    DrawGameText(hp_text.c_str(), 220, 22, 16, WHITE);
+    DrawGameText(hp_text.c_str(), 220, 22, 18, WHITE);
 
     // Player Gold
-    DrawGameText("GOLD:", 400, 20, 20, LIGHTGRAY);
+    DrawGameText("GOLD:", 400, 20, 22, LIGHTGRAY);
     std::string gold_text = std::to_string(session_.player_.gold) + " G";
-    DrawGameText(gold_text.c_str(), 470, 20, 20, GOLD);
+    DrawGameText(gold_text.c_str(), 470, 20, 22, GOLD);
 
     // Player Level
-    DrawGameText("LEVEL:", 580, 20, 20, LIGHTGRAY);
+    DrawGameText("LEVEL:", 580, 20, 22, LIGHTGRAY);
     std::string level_text = std::to_string(session_.player_.level);
-    DrawGameText(level_text.c_str(), 660, 20, 20, SKYBLUE);
+    DrawGameText(level_text.c_str(), 660, 20, 22, SKYBLUE);
 
     // Board population count (only count PlayerCtrl units)
     int board_units = 0;
@@ -1137,25 +1144,25 @@ void GameApp::DrawGame2D() {
     }
     std::string pop_text = "(" + std::to_string(board_units) + "/" +
                            std::to_string(session_.player_.level) + ")";
-    DrawGameText(pop_text.c_str(), 690, 22, 16, LIGHTGRAY);
+    DrawGameText(pop_text.c_str(), 690, 22, 18, LIGHTGRAY);
 
     // Round number
-    DrawGameText("ROUND:", 800, 20, 20, LIGHTGRAY);
+    DrawGameText("ROUND:", 800, 20, 22, LIGHTGRAY);
     std::string round_text = std::to_string(session_.round_);
-    DrawGameText(round_text.c_str(), 890, 20, 20, WHITE);
+    DrawGameText(round_text.c_str(), 890, 20, 22, WHITE);
 
     // Phase Indicator
     if (is_combat_) {
         DrawRectangle(980, 15, 120, 30, RED);
-        DrawGameText("COMBAT", 1005, 20, 18, WHITE);
+        DrawGameText("COMBAT", 1005, 20, 20, WHITE);
     } else {
         DrawRectangle(980, 15, 120, 30, GREEN);
-        DrawGameText("PREPARE", 1000, 20, 18, WHITE);
+        DrawGameText("PREPARE", 1000, 20, 20, WHITE);
     }
 
     // 2. Draw Status Message banner
     if (status_msg_timer_ > 0.0f) {
-        int width = MeasureGameText(status_msg_.c_str(), 20);
+        int width = MeasureGameText(status_msg_.c_str(), 22);
         DrawRectangle(640 - width / 2 - 20, 80, width + 40, 40,
                       Color{20, 20, 25, 220});
         DrawRectangleLines(640 - width / 2 - 20, 80, width + 40, 40, GOLD);
@@ -1165,7 +1172,7 @@ void GameApp::DrawGame2D() {
     // 3. Draw Active Synergies list on the left side
     DrawRectangle(20, 120, 220, 360, Color{16, 16, 20, 200});
     DrawRectangleLines(20, 120, 220, 360, Color{40, 40, 50, 255});
-    DrawGameText("ACTIVE RESONANCES", 30, 130, 16, GOLD);
+    DrawGameText("ACTIVE RESONANCES", 30, 130, 18, GOLD);
 
     auto active_synergies =
         unit::compute_synergies(is_combat_ ? combat_board_ : session_.board_);
@@ -1174,7 +1181,7 @@ void GameApp::DrawGame2D() {
     auto draw_synergy_item = [&](const char *name, int count, bool active,
                                  Color col) {
         std::string text = std::string(name) + ": " + std::to_string(count);
-        DrawGameText(text.c_str(), 35, sy_y, 14, active ? col : DARKGRAY);
+        DrawGameText(text.c_str(), 35, sy_y, 16, active ? col : DARKGRAY);
         if (active)
             DrawRectangle(180, sy_y + 2, 40, 12, col);
         sy_y += 24;
@@ -1205,9 +1212,9 @@ void GameApp::DrawGame2D() {
     // 4. Draw Equipment inventory selection panel on the right side
     DrawRectangle(1040, 120, 220, 360, Color{16, 16, 20, 200});
     DrawRectangleLines(1040, 120, 220, 360, Color{40, 40, 50, 255});
-    DrawGameText("EQUIPMENT POOL", 1055, 130, 16, GOLD);
-    DrawGameText("(Click to select, then", 1055, 155, 12, GRAY);
-    DrawGameText("click unit to equip)", 1055, 172, 12, GRAY);
+    DrawGameText("EQUIPMENT POOL", 1055, 130, 18, GOLD);
+    DrawGameText("(Click to select, then", 1055, 155, 14, GRAY);
+    DrawGameText("click unit to equip)", 1055, 172, 14, GRAY);
 
     int eq_grid_y = 200;
     for (int i = 0; i < (int)session_.equip_pool_.size(); ++i) {
@@ -1256,7 +1263,7 @@ void GameApp::DrawGame2D() {
     // 5. Draw Shop panel at the bottom
     DrawRectangle(0, 500, 1280, 220, Color{20, 20, 24, 255});
     DrawRectangleLines(0, 500, 1280, 220, Color{40, 40, 50, 255});
-    DrawGameText("RECRUITMENT SHOP", 50, 512, 16, GOLD);
+    DrawGameText("RECRUITMENT SHOP", 50, 512, 18, GOLD);
 
     // Shop slots
     for (int i = 0; i < 5; ++i) {
@@ -1280,20 +1287,20 @@ void GameApp::DrawGame2D() {
             std::string stars = "";
             for (int s = 0; s < stats.level; ++s)
                 stars += "*";
-            DrawGameText(stars.c_str(), x + 10, y + 18, 16, YELLOW);
+            DrawGameText(stars.c_str(), x + 10, y + 18, 20, YELLOW);
 
             // Element Name
             std::string name = GetElementName(unit::element(unit)) + " Slime";
-            DrawGameText(name.c_str(), x + 10, y + 42, 14, WHITE);
+            DrawGameText(name.c_str(), x + 10, y + 42, 16, WHITE);
 
             // Stats summary
             std::string stats_lbl = "HP: " + std::to_string(stats.max_hp) +
                                     " ATK: " + std::to_string(stats.atk);
-            DrawGameText(stats_lbl.c_str(), x + 10, y + 68, 10, LIGHTGRAY);
+            DrawGameText(stats_lbl.c_str(), x + 10, y + 68, 12, LIGHTGRAY);
 
             // Cost tag
             std::string cost_str = "COST: " + std::to_string(cost) + " G";
-            DrawGameText(cost_str.c_str(), x + 10, y + 95, 14, GOLD);
+            DrawGameText(cost_str.c_str(), x + 10, y + 95, 16, GOLD);
 
             // BUY Button
             int btn_x = x + 10;
@@ -1338,8 +1345,8 @@ void GameApp::DrawGame2D() {
         DrawRectangle(action_x, y, w, h, hover ? hover_col : col);
         DrawRectangleLines(action_x, y, w, h, Color{60, 60, 70, 255});
 
-        int text_w = MeasureGameText(text, 14);
-        DrawGameText(text, action_x + w / 2 - text_w / 2, y + 16, 14, WHITE);
+        int text_w = MeasureGameText(text, 16);
+        DrawGameText(text, action_x + w / 2 - text_w / 2, y + 16, 16, WHITE);
 
         if (!is_combat_ && hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             action_func();
@@ -1382,8 +1389,8 @@ void GameApp::DrawGame2D() {
         DrawRectangle(x, y, w, h,
                       active ? (hover ? hover_col : col) : DARKGRAY);
         DrawRectangleLines(x, y, w, h, Color{60, 60, 70, 255});
-        int text_w = MeasureGameText(text, 14);
-        DrawGameText(text, x + w / 2 - text_w / 2, y + h / 2 - 7, 14,
+        int text_w = MeasureGameText(text, 16);
+        DrawGameText(text, x + w / 2 - text_w / 2, y + h / 2 - 7, 16,
                      active ? WHITE : GRAY);
 
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -1445,8 +1452,8 @@ void GameApp::DrawGame2D() {
         DrawRectangleLines(1055, 660, 175, 45, RED);
         DrawGameText("DRAG HERE TO SELL",
                      1055 + 175 / 2 -
-                         MeasureGameText("DRAG HERE TO SELL", 12) / 2,
-                     660 + 16, 12, WHITE);
+                         MeasureGameText("DRAG HERE TO SELL", 14) / 2,
+                     660 + 16, 14, WHITE);
     }
 
     // 5.5 Draw 3D health/mana/shield/star bars on top of 3D slimes in 2D space
@@ -1534,8 +1541,8 @@ void GameApp::DrawGame2D() {
             Color star_col = (stats.level == 4) ? ORANGE : YELLOW;
             DrawGameText(level_str.c_str(),
                          x + bar_w / 2 -
-                             MeasureGameText(level_str.c_str(), 10) / 2,
-                         y - 11, 10, star_col);
+                             MeasureGameText(level_str.c_str(), 12) / 2,
+                         y - 11, 12, star_col);
         }
     }
 
@@ -1555,8 +1562,8 @@ void GameApp::DrawGame2D() {
         std::string title = player_won_combat_ ? "VICTORY!" : "DEFEAT!";
         Color title_color = player_won_combat_ ? GREEN : RED;
         DrawGameText(title.c_str(),
-                     box_x + box_w / 2 - MeasureGameText(title.c_str(), 24) / 2,
-                     box_y + 30, 24, title_color);
+                     box_x + box_w / 2 - MeasureGameText(title.c_str(), 28) / 2,
+                     box_y + 30, 28, title_color);
 
         std::string desc = player_won_combat_
                                ? "You cleared the stage. Obtained Gold!"
@@ -1565,8 +1572,8 @@ void GameApp::DrawGame2D() {
             desc = "Your health reached 0! GAME OVER!";
         }
         DrawGameText(desc.c_str(),
-                     box_x + box_w / 2 - MeasureGameText(desc.c_str(), 14) / 2,
-                     box_y + 80, 14, LIGHTGRAY);
+                     box_x + box_w / 2 - MeasureGameText(desc.c_str(), 16) / 2,
+                     box_y + 80, 16, LIGHTGRAY);
 
         // OK Button to close overlay
         int ok_w = 120;
@@ -1580,8 +1587,8 @@ void GameApp::DrawGame2D() {
         DrawRectangle(ok_x, ok_y, ok_w, ok_h,
                       hover ? Color{50, 50, 60, 255} : Color{40, 40, 50, 255});
         DrawRectangleLines(ok_x, ok_y, ok_w, ok_h, GRAY);
-        DrawGameText("OK", ok_x + ok_w / 2 - MeasureGameText("OK", 14) / 2,
-                     ok_y + 10, 14, WHITE);
+        DrawGameText("OK", ok_x + ok_w / 2 - MeasureGameText("OK", 16) / 2,
+                     ok_y + 10, 16, WHITE);
 
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             combat_result_announced_ = false;

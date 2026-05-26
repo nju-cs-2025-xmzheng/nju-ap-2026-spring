@@ -636,8 +636,8 @@ void GameApp::HandleInputs() {
         if (!over_ui && has_hover_) {
             auto u_ptr = get_unit(session_.board_, hovered_coord_);
             if (u_ptr) {
-                bool ok =
-                    session_.equip_unit(hovered_coord_, drag_equip_source_index_);
+                bool ok = session_.equip_unit(hovered_coord_,
+                                              drag_equip_source_index_);
                 if (ok) {
                     status_msg_ = "Equipped unit successfully!";
                     status_msg_timer_ = 1.5f;
@@ -646,7 +646,8 @@ void GameApp::HandleInputs() {
                     status_msg_timer_ = 1.5f;
                 }
             } else {
-                status_msg_ = "Preparation Phase - Drag and drop units to position them.";
+                status_msg_ =
+                    "Preparation Phase - Drag and drop units to position them.";
                 status_msg_timer_ = 0.0f;
             }
         }
@@ -841,8 +842,8 @@ void GameApp::DrawGame3D() {
                     Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
                     if (ray.direction.y < 0) {
                         float t = -ray.position.y / ray.direction.y;
-                        sphere_pos =
-                            Vector3Add(ray.position, Vector3Scale(ray.direction, t));
+                        sphere_pos = Vector3Add(ray.position,
+                                                Vector3Scale(ray.direction, t));
                         sphere_pos.y = 0.35f;
                     } else {
                         sphere_pos.y += 0.35f;
@@ -867,8 +868,10 @@ void GameApp::DrawGame3D() {
                     elem = unit::Element::Cryo;
 
                 Color item_color = GetElementColor(elem);
-                DrawSphere(sphere_pos, 0.12f, item_color);
-                DrawSphereWires(sphere_pos, 0.13f, 8, 8, Fade(item_color, 0.5f));
+                // Inner solid core
+                DrawSphere(sphere_pos, 0.09f, item_color);
+                // Outer translucent shell
+                DrawSphere(sphere_pos, 0.13f, Fade(item_color, 0.4f));
             }
         }
     }
@@ -1006,7 +1009,13 @@ void GameApp::DrawGame3D() {
             else if (std::holds_alternative<unit::CryoDrop>(stats.equipped))
                 elem = unit::Element::Cryo;
 
-            DrawSphere(item_pos, 0.08f, GetElementColor(elem));
+            Color item_color = GetElementColor(elem);
+            // Inner solid core
+            DrawSphere(item_pos, 0.05f, item_color);
+            // Outer translucent shell
+            DrawSphere(item_pos, 0.08f, Fade(item_color, 0.4f));
+            // Outer wire outline
+            DrawSphereWires(item_pos, 0.081f, 8, 8, Fade(item_color, 0.8f));
         }
     }
 

@@ -798,17 +798,11 @@ void GameApp::DrawGame3D() {
                 (r >= 4) ? Color{50, 110, 80, 255}
                          : Color{110, 50, 50, 255}; // Player area vs Enemy area
 
-            // Highlight if selected/hovered
+            // Highlight if hovered
             bool highlight = false;
             if (has_hover_ &&
                 std::holds_alternative<engine::HexCoord>(hovered_coord_)) {
                 auto hex = std::get<engine::HexCoord>(hovered_coord_);
-                if (hex.r == r && hex.c == c)
-                    highlight = true;
-            }
-            if (has_selection_ &&
-                std::holds_alternative<engine::HexCoord>(selected_coord_)) {
-                auto hex = std::get<engine::HexCoord>(selected_coord_);
                 if (hex.r == r && hex.c == c)
                     highlight = true;
             }
@@ -827,20 +821,13 @@ void GameApp::DrawGame3D() {
             if (linear.x == i)
                 highlight = true;
         }
-        if (has_selection_ &&
-            std::holds_alternative<engine::LinearCoord>(selected_coord_)) {
-            auto linear = std::get<engine::LinearCoord>(selected_coord_);
-            if (linear.x == i)
-                highlight = true;
-        }
         DrawHexCell(pos, Color{60, 60, 75, 255}, highlight);
     }
 
     // 3. Draw Equipment Slots
     for (int i = 0; i < 8; ++i) {
         Vector3 pos = GetEquipWorldPos(i);
-        bool eq_highlight =
-            (selected_equip_index_ == i) || (hovered_equip_index_ == i);
+        bool eq_highlight = (hovered_equip_index_ == i);
         DrawHexCell(pos, Color{45, 45, 55, 255}, eq_highlight);
 
         // Draw equipment sphere floating in slot if present

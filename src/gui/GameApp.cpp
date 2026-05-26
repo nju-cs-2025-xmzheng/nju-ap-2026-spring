@@ -513,12 +513,13 @@ void GameApp::HandleInputs() {
         if (!over_ui) {
             if (hovered_equip_index_ != -1 &&
                 hovered_equip_index_ < (int)session_.equip_pool_.size()) {
-                selected_equip_index_ = hovered_equip_index_;
-                status_msg_ = "Selected " +
+                is_dragging_equip_ = true;
+                drag_equip_source_index_ = hovered_equip_index_;
+                status_msg_ = "Dragging " +
                               GetElementName(static_cast<unit::Element>(
-                                  hovered_equip_index_ % 6)) +
-                              " Drop. Click a unit to equip.";
-                status_msg_timer_ = 3.0f;
+                                  drag_equip_source_index_ % 6)) +
+                              " Drop.";
+                status_msg_timer_ = 1.5f;
                 has_selection_ = false;
                 return;
             }
@@ -533,7 +534,6 @@ void GameApp::HandleInputs() {
                 }
             } else {
                 has_selection_ = false;
-                selected_equip_index_ = -1;
             }
         }
     }
@@ -631,14 +631,13 @@ void GameApp::HandleInputs() {
         }
     }
 
-    // 4. Equipment application logic
-    if (selected_equip_index_ != -1 &&
-        IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !over_ui) {
-        if (has_hover_) {
+    if (is_dragging_equip_ && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        is_dragging_equip_ = false;
+        if (!over_ui && has_hover_) {
             auto u_ptr = get_unit(session_.board_, hovered_coord_);
             if (u_ptr) {
                 bool ok =
-                    session_.equip_unit(hovered_coord_, selected_equip_index_);
+                    session_.equip_unit(hovered_coord_, drag_equip_source_index_);
                 if (ok) {
                     status_msg_ = "Equipped unit successfully!";
                     status_msg_timer_ = 1.5f;
@@ -646,9 +645,12 @@ void GameApp::HandleInputs() {
                     status_msg_ = "Failed: unit already has equipment!";
                     status_msg_timer_ = 1.5f;
                 }
-                selected_equip_index_ = -1;
+            } else {
+                status_msg_ = "Preparation Phase - Drag and drop units to position them.";
+                status_msg_timer_ = 0.0f;
             }
         }
+        drag_equip_source_index_ = -1;
     }
 }
 
@@ -832,7 +834,19 @@ void GameApp::DrawGame3D() {
         if (i < (int)session_.equip_pool_.size()) {
             // Float sphere
             Vector3 sphere_pos = pos;
-            sphere_pos.y += 0.35f + sin(GetTime() * 3.0f + i) * 0.08f;
+            if (is_dragging_equip_ && drag_equip_source_index_ == i) {
+                Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
+                if (ray.direction.y < 0) {
+                    float t = -ray.position.y / ray.direction.y;
+                    sphere_pos =
+                        Vector3Add(ray.position, Vector3Scale(ray.direction, t));
+                    sphere_pos.y = 0.35f;
+                } else {
+                    sphere_pos.y += 0.35f;
+                }
+            } else {
+                sphere_pos.y += 0.35f + sin(GetTime() * 3.0f + i) * 0.08f;
+            }
 
             unit::Equipment eq = session_.equip_pool_[i];
             unit::Element elem = unit::Element::Pyro;

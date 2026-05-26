@@ -104,6 +104,8 @@ class GameApp {
     engine::Coord hovered_coord_;
     bool has_hover_ = false;
     int hovered_equip_index_ = -1; // -1 means none hovered
+    bool is_dragging_equip_ = false;
+    int drag_equip_source_index_ = -1;
 
     // Camera parameters
     Camera3D camera_;

@@ -30,6 +30,13 @@ struct UnitStats {
     int level = 1;
     int shield = 0;
     Equipment equipped = std::monostate{};
+
+    // FSM & Combat
+    int attack_cooldown = 0;
+    int move_cooldown = 0;
+    int stun_ticks = 0;
+    int attack_interval = 60; // default 60 ticks per attack
+    int move_interval = 20;   // default 20 ticks per move
 };
 
 struct PyroSlime;

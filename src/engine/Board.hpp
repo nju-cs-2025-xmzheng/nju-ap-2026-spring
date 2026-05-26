@@ -4,9 +4,12 @@
 #include "common/__cpo.hpp"
 #include "engine/Coord.hpp"
 #include "unit/Unit.hpp"
+#include <algorithm>
 #include <array>
 #include <memory>
+#include <optional>
 #include <variant>
+#include <vector>
 
 namespace Synera::engine {
 
@@ -18,6 +21,8 @@ struct is_occupied_t {};
 struct remove_unit_t {};
 struct count_player_units_on_board_t {};
 struct move_unit_t {};
+struct find_path_t {};
+struct select_target_t {};
 } // namespace __tag
 
 namespace __fn {
@@ -94,6 +99,30 @@ struct move_unit_fn {
                           std::forward<L>(limit));
     }
 };
+
+struct find_path_fn {
+    template <typename B, typename C1, typename C2>
+    constexpr auto operator()(B &&b, C1 &&start, C2 &&goal) const
+        noexcept(noexcept(tag_invoke(__tag::find_path_t{}, std::forward<B>(b),
+                                     std::forward<C1>(start),
+                                     std::forward<C2>(goal))))
+            -> decltype(auto) {
+        return tag_invoke(__tag::find_path_t{}, std::forward<B>(b),
+                          std::forward<C1>(start), std::forward<C2>(goal));
+    }
+};
+
+struct select_target_fn {
+    template <typename B, typename U, typename C>
+    constexpr auto operator()(B &&b, U &&u, C &&my_coord) const
+        noexcept(noexcept(tag_invoke(__tag::select_target_t{},
+                                     std::forward<B>(b), std::forward<U>(u),
+                                     std::forward<C>(my_coord))))
+            -> decltype(auto) {
+        return tag_invoke(__tag::select_target_t{}, std::forward<B>(b),
+                          std::forward<U>(u), std::forward<C>(my_coord));
+    }
+};
 } // namespace __fn
 
 inline constexpr __fn::init_board_fn init_board{};
@@ -104,6 +133,8 @@ inline constexpr __fn::remove_unit_fn remove_unit{};
 inline constexpr __fn::count_player_units_on_board_fn
     count_player_units_on_board{};
 inline constexpr __fn::move_unit_fn move_unit{};
+inline constexpr __fn::find_path_fn find_path{};
+inline constexpr __fn::select_target_fn select_target{};
 
 class Board {
     using Coord = std::variant<HexCoord, LinearCoord>;
@@ -254,6 +285,138 @@ class Board {
             set_unit(b, from, std::move(temp_unit));
             return true;
         }
+    }
+
+    friend std::vector<HexCoord> tag_invoke(__tag::find_path_t, const Board &b,
+                                            HexCoord start, HexCoord goal) {
+        std::vector<HexCoord> path;
+        if (!in_range(start) || !in_range(goal))
+            return path;
+
+        std::vector<HexCoord> q;
+        size_t head = 0;
+        bool visited[config::engine::BOARD_ROWS][config::engine::BOARD_COLS] =
+            {};
+        HexCoord parent[config::engine::BOARD_ROWS][config::engine::BOARD_COLS];
+        for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
+            for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+                parent[r][c] = HexCoord{-1, -1};
+            }
+        }
+
+        q.push_back(start);
+        visited[start.r][start.c] = true;
+
+        bool found = false;
+        while (head < q.size()) {
+            HexCoord curr = q[head++];
+            if (curr == goal) {
+                found = true;
+                break;
+            }
+
+            for (HexCoord next : neighbor(curr)) {
+                if (!visited[next.r][next.c]) {
+                    bool is_obstacle = false;
+                    if (!(next == goal) && is_occupied(b, next)) {
+                        is_obstacle = true;
+                    }
+                    if (!is_obstacle) {
+                        visited[next.r][next.c] = true;
+                        parent[next.r][next.c] = curr;
+                        q.push_back(next);
+                    }
+                }
+            }
+        }
+
+        HexCoord end_cell = goal;
+        if (!found) {
+            int min_dist = 999999;
+            HexCoord closest = start;
+            for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
+                for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+                    if (visited[r][c]) {
+                        HexCoord cell{r, c};
+                        int d = distance(cell, goal);
+                        if (d < min_dist) {
+                            min_dist = d;
+                            closest = cell;
+                        }
+                    }
+                }
+            }
+            end_cell = closest;
+        }
+
+        if (!(end_cell == start)) {
+            HexCoord curr = end_cell;
+            while (!(curr == start)) {
+                path.push_back(curr);
+                curr = parent[curr.r][curr.c];
+            }
+            path.push_back(start);
+            std::reverse(path.begin(), path.end());
+        } else {
+            path.push_back(start);
+        }
+
+        return path;
+    }
+
+    friend std::optional<HexCoord> tag_invoke(__tag::select_target_t,
+                                              const Board &b,
+                                              const unit::Unit &u,
+                                              HexCoord my_coord) {
+        std::optional<HexCoord> best_target = std::nullopt;
+        int best_dist = 999999;
+        int best_hp = -1;
+        int best_c = 999999;
+        int best_r = -1;
+
+        unit::Owner my_owner = unit::stats(u).owner;
+
+        for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
+            for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+                HexCoord cell{r, c};
+                if (auto target_ptr = get_unit(b, cell)) {
+                    auto &target_stats = unit::stats(*target_ptr);
+                    if (target_stats.owner != my_owner && target_stats.hp > 0) {
+                        int dist = distance(my_coord, cell);
+                        bool is_better = false;
+
+                        if (!best_target.has_value()) {
+                            is_better = true;
+                        } else {
+                            if (dist < best_dist) {
+                                is_better = true;
+                            } else if (dist == best_dist) {
+                                if (target_stats.hp > best_hp) {
+                                    is_better = true;
+                                } else if (target_stats.hp == best_hp) {
+                                    if (c < best_c) {
+                                        is_better = true;
+                                    } else if (c == best_c) {
+                                        if (r > best_r) {
+                                            is_better = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (is_better) {
+                            best_target = cell;
+                            best_dist = dist;
+                            best_hp = target_stats.hp;
+                            best_c = c;
+                            best_r = r;
+                        }
+                    }
+                }
+            }
+        }
+        return best_target;
     }
 };
 

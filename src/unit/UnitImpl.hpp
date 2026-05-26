@@ -77,7 +77,9 @@ inline void tag_invoke(__tag::cast_skill_t, HydroSlime &u, engine::Board &board,
                        engine::HexCoord target) {
     if (auto target_unit = engine::get_unit(board, target)) {
         deal_damage(board, u, *target_unit, int(u.stats_.atk * 1.2));
-        stats(*target_unit).state = State::Idle;
+        auto &target_stats = stats(*target_unit);
+        target_stats.state = State::Idle;
+        target_stats.stun_ticks = 60;
     }
 }
 
@@ -215,7 +217,9 @@ inline void tag_invoke(__tag::cast_skill_t, CryoSlime &u, engine::Board &board,
                        engine::HexCoord target) {
     if (auto target_unit = engine::get_unit(board, target)) {
         deal_damage(board, u, *target_unit, int(u.stats_.atk * 1.2));
-        stats(*target_unit).state = State::Idle;
+        auto &target_stats = stats(*target_unit);
+        target_stats.state = State::Idle;
+        target_stats.stun_ticks = 60;
     }
 }
 
@@ -247,7 +251,9 @@ inline constexpr void tag_invoke(__tag::normal_attack_t, T &&a, B &&board,
             // have 20% chance to freeze (stun for 1 tick)
             if (synergies.shattering_ice && element(a) == Element::Cryo) {
                 if (std::rand() % 100 < 20) {
-                    stats(*target_unit).state = State::Idle;
+                    auto &target_stats = stats(*target_unit);
+                    target_stats.state = State::Idle;
+                    target_stats.stun_ticks = 60;
                 }
             }
 

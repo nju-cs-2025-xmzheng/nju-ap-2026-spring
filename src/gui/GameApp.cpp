@@ -77,7 +77,7 @@ GameApp::GameApp() {
     SetTargetFPS(60);
 
     // 2. Initialize Camera
-    camera_.position = {0.0f, 10.0f, 7.0f};
+    camera_.position = {0.0f, 15.0f, 10.0f};
     camera_.target = {0.0f, 0.0f, 3.0f};
     camera_.up = {0.0f, 1.0f, 0.0f};
     camera_.fovy = 45.0f;
@@ -212,8 +212,6 @@ bool GameApp::IsMouseOverUI() {
         return true;
     if (m.x >= 20 && m.x <= 240 && m.y >= 120 && m.y <= 480)
         return true;
-    if (m.x >= 1040 && m.x <= 1260 && m.y >= 120 && m.y <= 480)
-        return true;
     if (combat_result_announced_)
         return true;
     return false;
@@ -225,8 +223,8 @@ void GameApp::Update() {
         target_cam_pos_ = {0.0f, 15.0f, 3.0f};
         target_cam_target_ = {0.0f, 0.0f, 1.4f};
     } else {
-        target_cam_pos_ = {0.0f, 10.0f, 7.0f};
-        target_cam_target_ = {0.0f, 0.0f, 3.0f};
+        target_cam_pos_ = {0.0f, 8.5f, 9.0f};
+        target_cam_target_ = {0.0f, 0.0f, 4.2f};
     }
     camera_.position =
         Vector3Lerp(camera_.position, target_cam_pos_, GetFrameTime() * 4.0f);
@@ -969,7 +967,7 @@ void GameApp::DrawGame3D() {
         if (!v.is_dead &&
             !std::holds_alternative<std::monostate>(stats.equipped)) {
             Vector3 item_pos = render_pos;
-            item_pos.y += visual_scale.y + 0.3f + sin(GetTime() * 4.0f) * 0.06f;
+            item_pos.y += visual_scale.y + sin(GetTime() * 4.0f) * 0.06f;
 
             unit::Element elem = unit::Element::Pyro;
             if (std::holds_alternative<unit::PyroDrop>(stats.equipped))
@@ -1197,57 +1195,6 @@ void GameApp::DrawGame2D() {
             ? 4
             : 0,
         active_synergies.protective_canopy, GREEN);
-
-    // 4. Draw Equipment inventory selection panel on the right side
-    DrawRectangle(1040, 120, 220, 360, Color{16, 16, 20, 200});
-    DrawRectangleLines(1040, 120, 220, 360, Color{40, 40, 50, 255});
-    DrawGameText("EQUIPMENT POOL", 1055, 130, 18, GOLD);
-    DrawGameText("(Click to select, then", 1055, 155, 14, GRAY);
-    DrawGameText("click unit to equip)", 1055, 172, 14, GRAY);
-
-    int eq_grid_y = 200;
-    for (int i = 0; i < (int)session_.equip_pool_.size(); ++i) {
-        int r = i / 4;
-        int c = i % 4;
-        int x = 1060 + c * 48;
-        int y = eq_grid_y + r * 48;
-
-        // Detect click
-        Vector2 mouse = GetMousePosition();
-        if (!is_combat_ &&
-            CheckCollisionPointRec(mouse, {(float)x, (float)y, 40, 40}) &&
-            IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            selected_equip_index_ = i;
-            status_msg_ = "Selected " +
-                          GetElementName(static_cast<unit::Element>(i % 6)) +
-                          " Drop. Click a unit to equip it.";
-            status_msg_timer_ = 3.0f;
-        }
-
-        unit::Equipment eq = session_.equip_pool_[i];
-        unit::Element elem = unit::Element::Pyro;
-        if (std::holds_alternative<unit::PyroDrop>(eq))
-            elem = unit::Element::Pyro;
-        else if (std::holds_alternative<unit::HydroDrop>(eq))
-            elem = unit::Element::Hydro;
-        else if (std::holds_alternative<unit::AnemoDrop>(eq))
-            elem = unit::Element::Anemo;
-        else if (std::holds_alternative<unit::GeoDrop>(eq))
-            elem = unit::Element::Geo;
-        else if (std::holds_alternative<unit::ElectroDrop>(eq))
-            elem = unit::Element::Electro;
-        else if (std::holds_alternative<unit::CryoDrop>(eq))
-            elem = unit::Element::Cryo;
-
-        DrawRectangle(x, y, 40, 40, Color{30, 30, 38, 255});
-        DrawRectangleLines(x, y, 40, 40,
-                           selected_equip_index_ == i ? YELLOW
-                                                      : Color{50, 50, 65, 255});
-
-        Color item_color = GetElementColor(elem);
-        DrawCircle(x + 20, y + 20, 10, item_color);
-        DrawCircleLines(x + 20, y + 20, 12, Fade(item_color, 0.5f));
-    }
 
     // 5. Draw Shop panel at the bottom
     DrawRectangle(0, 500, 1280, 220, Color{20, 20, 24, 255});

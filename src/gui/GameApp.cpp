@@ -77,8 +77,8 @@ GameApp::GameApp() {
     SetTargetFPS(60);
 
     // 2. Initialize Camera
-    camera_.position = {0.0f, 6.5f, 5.5f};
-    camera_.target = {0.0f, 0.0f, 2.3f};
+    camera_.position = {0.0f, 10.0f, 7.0f};
+    camera_.target = {0.0f, 0.0f, 3.0f};
     camera_.up = {0.0f, 1.0f, 0.0f};
     camera_.fovy = 45.0f;
     camera_.projection = CAMERA_PERSPECTIVE;
@@ -222,11 +222,11 @@ bool GameApp::IsMouseOverUI() {
 void GameApp::Update() {
     // 1. Smoothly interpolate camera position and target depending on phase
     if (is_combat_) {
-        target_cam_pos_ = {0.0f, 8.5f, 1.5f};
-        target_cam_target_ = {0.0f, 0.0f, -0.6f};
+        target_cam_pos_ = {0.0f, 15.0f, 3.0f};
+        target_cam_target_ = {0.0f, 0.0f, 1.4f};
     } else {
-        target_cam_pos_ = {0.0f, 6.5f, 5.5f};
-        target_cam_target_ = {0.0f, 0.0f, 2.3f};
+        target_cam_pos_ = {0.0f, 10.0f, 7.0f};
+        target_cam_target_ = {0.0f, 0.0f, 3.0f};
     }
     camera_.position =
         Vector3Lerp(camera_.position, target_cam_pos_, GetFrameTime() * 4.0f);

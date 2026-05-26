@@ -28,12 +28,14 @@ class GameSession {
     std::array<std::optional<std::pair<unit::Unit, int>>, 5> shop_{};
     std::vector<unit::Equipment> equip_pool_;
     std::mt19937 rng_;
+    int round_ = 1;
 
     GameSession() {
         std::random_device rd;
         rng_.seed(rd());
         init_board(board_);
         refresh_shop(true);
+        spawn_enemies();
     }
 
     bool refresh_shop(bool free = false) {
@@ -229,23 +231,42 @@ class GameSession {
         }
     }
 
+  public:
+    void spawn_enemies() {
+        for (int r = 0; r < 4; ++r) {
+            for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+                remove_unit(board_, HexCoord{r, c});
+            }
+        }
+
+        int count = std::min(6, round_);
+        int star_level = std::min(4, (round_ - 1) / 3 + 1);
+
+        for (int i = 0; i < count; ++i) {
+            unit::Element elem = static_cast<unit::Element>(i % 6);
+            HexCoord pos{1, 1 + i};
+            set_unit(board_, pos, std::make_shared<unit::Unit>(make_slime(elem, star_level, unit::Owner::EnemyCtrl)));
+        }
+    }
+
   private:
-    static unit::Unit make_slime(unit::Element elem, int star_level) {
+    static unit::Unit make_slime(unit::Element elem, int star_level,
+                                 unit::Owner owner = unit::Owner::PlayerCtrl) {
         switch (elem) {
         case unit::Element::Pyro:
-            return unit::PyroSlime(unit::Owner::PlayerCtrl, star_level);
+            return unit::PyroSlime(owner, star_level);
         case unit::Element::Hydro:
-            return unit::HydroSlime(unit::Owner::PlayerCtrl, star_level);
+            return unit::HydroSlime(owner, star_level);
         case unit::Element::Anemo:
-            return unit::AnemoSlime(unit::Owner::PlayerCtrl, star_level);
+            return unit::AnemoSlime(owner, star_level);
         case unit::Element::Geo:
-            return unit::GeoSlime(unit::Owner::PlayerCtrl, star_level);
+            return unit::GeoSlime(owner, star_level);
         case unit::Element::Electro:
-            return unit::ElectroSlime(unit::Owner::PlayerCtrl, star_level);
+            return unit::ElectroSlime(owner, star_level);
         case unit::Element::Cryo:
-            return unit::CryoSlime(unit::Owner::PlayerCtrl, star_level);
+            return unit::CryoSlime(owner, star_level);
         }
-        return unit::PyroSlime(unit::Owner::PlayerCtrl, star_level);
+        return unit::PyroSlime(owner, star_level);
     }
 
     static void upgrade_unit(unit::Unit &u) {

@@ -175,7 +175,8 @@ inline bool tag_invoke(__tag::save_t, const GameSession &session,
     out << "[player]\n";
     out << "hp " << session.player_.hp << "\n";
     out << "gold " << session.player_.gold << "\n";
-    out << "level " << session.player_.level << "\n\n";
+    out << "level " << session.player_.level << "\n";
+    out << "round " << session.round_ << "\n\n";
 
     // 2. Save Shop
     out << "[shop]\n";
@@ -288,6 +289,8 @@ inline bool tag_invoke(__tag::load_t, GameSession &session,
                     session.player_.gold = val;
                 else if (key == "level")
                     session.player_.level = val;
+                else if (key == "round")
+                    session.round_ = val;
             }
         } else if (section == "shop") {
             std::string key;

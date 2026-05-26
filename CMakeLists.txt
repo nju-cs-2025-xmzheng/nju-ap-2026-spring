@@ -4,14 +4,15 @@ project(Synera LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(SDL3 REQUIRED)
+find_package(raylib REQUIRED)
 
 add_executable(Synera
     src/main.cpp
+    src/gui/GameApp.cpp
 )
 
 target_include_directories(Synera PRIVATE src)
-target_link_libraries(Synera PRIVATE SDL3::SDL3)
+target_link_libraries(Synera PRIVATE raylib)
 
 include(CTest)
 
@@ -19,7 +20,6 @@ if(BUILD_TESTING)
     macro(add_synera_test name src_file)
         add_executable(${name} ${src_file})
         target_include_directories(${name} PRIVATE src)
-        target_link_libraries(${name} PRIVATE SDL3::SDL3)
         add_test(NAME ${name} COMMAND $<TARGET_FILE:${name}>)
         set_tests_properties(${name} PROPERTIES LABELS "unit" TIMEOUT 5)
     endmacro()

@@ -115,11 +115,34 @@ constexpr void tag_invoke(__tag::take_damage_t, T &&a, int amount) {
     }
 }
 
+constexpr double get_star_scale(int level) noexcept {
+    switch (level) {
+    case 1:
+        return 1.0;
+    case 2:
+        return 2.0;
+    case 3:
+        return 3.5;
+    case 4:
+        return 5.5;
+    default:
+        return 1.0;
+    }
+}
+
 struct PyroSlime {
     UnitStats stats_;
     constexpr PyroSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 350 * level, 350 * level, 35 * level,
-                 1,     60,          0,           level,       0} {}
+        : stats_{owner,
+                 State::Idle,
+                 int(350 * get_star_scale(level)),
+                 int(350 * get_star_scale(level)),
+                 int(35 * get_star_scale(level)),
+                 1,
+                 60,
+                 0,
+                 level,
+                 0} {}
 
     friend constexpr const UnitStats &tag_invoke(__tag::stats_t,
                                                  const PyroSlime &u) noexcept {
@@ -144,8 +167,16 @@ struct PyroSlime {
 struct HydroSlime {
     UnitStats stats_;
     constexpr HydroSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 400 * level, 400 * level, 30 * level,
-                 2,     60,          0,           level,       0} {}
+        : stats_{owner,
+                 State::Idle,
+                 int(400 * get_star_scale(level)),
+                 int(400 * get_star_scale(level)),
+                 int(30 * get_star_scale(level)),
+                 2,
+                 60,
+                 0,
+                 level,
+                 0} {}
 
     friend constexpr const UnitStats &tag_invoke(__tag::stats_t,
                                                  const HydroSlime &u) noexcept {
@@ -172,8 +203,16 @@ struct HydroSlime {
 struct AnemoSlime {
     UnitStats stats_;
     constexpr AnemoSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 300 * level, 300 * level, 40 * level,
-                 3,     50,          0,           level,       0} {}
+        : stats_{owner,
+                 State::Idle,
+                 int(300 * get_star_scale(level)),
+                 int(300 * get_star_scale(level)),
+                 int(40 * get_star_scale(level)),
+                 3,
+                 50,
+                 0,
+                 level,
+                 0} {}
 
     friend constexpr const UnitStats &tag_invoke(__tag::stats_t,
                                                  const AnemoSlime &u) noexcept {
@@ -198,8 +237,16 @@ struct AnemoSlime {
 struct GeoSlime {
     UnitStats stats_;
     constexpr GeoSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 450 * level, 450 * level, 25 * level,
-                 1,     70,          0,           level,       200 * level} {}
+        : stats_{owner,
+                 State::Idle,
+                 int(450 * get_star_scale(level)),
+                 int(450 * get_star_scale(level)),
+                 int(25 * get_star_scale(level)),
+                 1,
+                 70,
+                 0,
+                 level,
+                 int(200 * get_star_scale(level))} {}
 
     friend constexpr const UnitStats &tag_invoke(__tag::stats_t,
                                                  const GeoSlime &u) noexcept {
@@ -224,8 +271,16 @@ struct GeoSlime {
 struct ElectroSlime {
     UnitStats stats_;
     constexpr ElectroSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 320 * level, 320 * level, 38 * level,
-                 2,     60,          0,           level,       0} {}
+        : stats_{owner,
+                 State::Idle,
+                 int(320 * get_star_scale(level)),
+                 int(320 * get_star_scale(level)),
+                 int(38 * get_star_scale(level)),
+                 2,
+                 60,
+                 0,
+                 level,
+                 0} {}
 
     friend constexpr const UnitStats &
     tag_invoke(__tag::stats_t, const ElectroSlime &u) noexcept {
@@ -250,8 +305,16 @@ struct ElectroSlime {
 struct CryoSlime {
     UnitStats stats_;
     constexpr CryoSlime(Owner owner, int level = 1) noexcept
-        : stats_{owner, State::Idle, 380 * level, 380 * level, 32 * level,
-                 2,     60,          0,           level,       150 * level} {}
+        : stats_{owner,
+                 State::Idle,
+                 int(380 * get_star_scale(level)),
+                 int(380 * get_star_scale(level)),
+                 int(32 * get_star_scale(level)),
+                 2,
+                 60,
+                 0,
+                 level,
+                 int(150 * get_star_scale(level))} {}
 
     friend constexpr const UnitStats &tag_invoke(__tag::stats_t,
                                                  const CryoSlime &u) noexcept {

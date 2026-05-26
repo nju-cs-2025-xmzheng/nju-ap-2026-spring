@@ -811,61 +811,65 @@ void GameApp::DrawGame3D() {
         }
     }
 
-    // 2. Draw Bench Slots
-    for (int i = 0; i < config::engine::BENCH_SIZE; ++i) {
-        Vector3 pos = GetBenchWorldPos(i);
-        bool highlight = false;
-        if (has_hover_ &&
-            std::holds_alternative<engine::LinearCoord>(hovered_coord_)) {
-            auto linear = std::get<engine::LinearCoord>(hovered_coord_);
-            if (linear.x == i)
-                highlight = true;
+    // 2. Draw Bench Slots (hidden during combat)
+    if (!is_combat_) {
+        for (int i = 0; i < config::engine::BENCH_SIZE; ++i) {
+            Vector3 pos = GetBenchWorldPos(i);
+            bool highlight = false;
+            if (has_hover_ &&
+                std::holds_alternative<engine::LinearCoord>(hovered_coord_)) {
+                auto linear = std::get<engine::LinearCoord>(hovered_coord_);
+                if (linear.x == i)
+                    highlight = true;
+            }
+            DrawHexCell(pos, Color{60, 60, 75, 255}, highlight);
         }
-        DrawHexCell(pos, Color{60, 60, 75, 255}, highlight);
     }
 
-    // 3. Draw Equipment Slots
-    for (int i = 0; i < 8; ++i) {
-        Vector3 pos = GetEquipWorldPos(i);
-        bool eq_highlight = (hovered_equip_index_ == i);
-        DrawHexCell(pos, Color{45, 45, 55, 255}, eq_highlight);
+    // 3. Draw Equipment Slots (hidden during combat)
+    if (!is_combat_) {
+        for (int i = 0; i < 8; ++i) {
+            Vector3 pos = GetEquipWorldPos(i);
+            bool eq_highlight = (hovered_equip_index_ == i);
+            DrawHexCell(pos, Color{45, 45, 55, 255}, eq_highlight);
 
-        // Draw equipment sphere floating in slot if present
-        if (i < (int)session_.equip_pool_.size()) {
-            // Float sphere
-            Vector3 sphere_pos = pos;
-            if (is_dragging_equip_ && drag_equip_source_index_ == i) {
-                Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
-                if (ray.direction.y < 0) {
-                    float t = -ray.position.y / ray.direction.y;
-                    sphere_pos =
-                        Vector3Add(ray.position, Vector3Scale(ray.direction, t));
-                    sphere_pos.y = 0.35f;
+            // Draw equipment sphere floating in slot if present
+            if (i < (int)session_.equip_pool_.size()) {
+                // Float sphere
+                Vector3 sphere_pos = pos;
+                if (is_dragging_equip_ && drag_equip_source_index_ == i) {
+                    Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
+                    if (ray.direction.y < 0) {
+                        float t = -ray.position.y / ray.direction.y;
+                        sphere_pos =
+                            Vector3Add(ray.position, Vector3Scale(ray.direction, t));
+                        sphere_pos.y = 0.35f;
+                    } else {
+                        sphere_pos.y += 0.35f;
+                    }
                 } else {
-                    sphere_pos.y += 0.35f;
+                    sphere_pos.y += 0.35f + sin(GetTime() * 3.0f + i) * 0.08f;
                 }
-            } else {
-                sphere_pos.y += 0.35f + sin(GetTime() * 3.0f + i) * 0.08f;
+
+                unit::Equipment eq = session_.equip_pool_[i];
+                unit::Element elem = unit::Element::Pyro;
+                if (std::holds_alternative<unit::PyroDrop>(eq))
+                    elem = unit::Element::Pyro;
+                else if (std::holds_alternative<unit::HydroDrop>(eq))
+                    elem = unit::Element::Hydro;
+                else if (std::holds_alternative<unit::AnemoDrop>(eq))
+                    elem = unit::Element::Anemo;
+                else if (std::holds_alternative<unit::GeoDrop>(eq))
+                    elem = unit::Element::Geo;
+                else if (std::holds_alternative<unit::ElectroDrop>(eq))
+                    elem = unit::Element::Electro;
+                else if (std::holds_alternative<unit::CryoDrop>(eq))
+                    elem = unit::Element::Cryo;
+
+                Color item_color = GetElementColor(elem);
+                DrawSphere(sphere_pos, 0.12f, item_color);
+                DrawSphereWires(sphere_pos, 0.13f, 8, 8, Fade(item_color, 0.5f));
             }
-
-            unit::Equipment eq = session_.equip_pool_[i];
-            unit::Element elem = unit::Element::Pyro;
-            if (std::holds_alternative<unit::PyroDrop>(eq))
-                elem = unit::Element::Pyro;
-            else if (std::holds_alternative<unit::HydroDrop>(eq))
-                elem = unit::Element::Hydro;
-            else if (std::holds_alternative<unit::AnemoDrop>(eq))
-                elem = unit::Element::Anemo;
-            else if (std::holds_alternative<unit::GeoDrop>(eq))
-                elem = unit::Element::Geo;
-            else if (std::holds_alternative<unit::ElectroDrop>(eq))
-                elem = unit::Element::Electro;
-            else if (std::holds_alternative<unit::CryoDrop>(eq))
-                elem = unit::Element::Cryo;
-
-            Color item_color = GetElementColor(elem);
-            DrawSphere(sphere_pos, 0.12f, item_color);
-            DrawSphereWires(sphere_pos, 0.13f, 8, 8, Fade(item_color, 0.5f));
         }
     }
 
@@ -883,6 +887,11 @@ void GameApp::DrawGame3D() {
                 auto hex = std::get<HexCoord>(v.last_coord);
                 if (hex.r < 4)
                     continue;
+            }
+        } else {
+            // Hide bench units in combat phase
+            if (std::holds_alternative<LinearCoord>(v.last_coord)) {
+                continue;
             }
         }
 
@@ -1419,6 +1428,11 @@ void GameApp::DrawGame2D() {
                 auto hex = std::get<HexCoord>(v.last_coord);
                 if (hex.r < 4)
                     continue;
+            }
+        } else {
+            // Hide bench units HUD in combat phase
+            if (std::holds_alternative<LinearCoord>(v.last_coord)) {
+                continue;
             }
         }
 

@@ -327,7 +327,11 @@ void GameApp::Update() {
 
                     // Slide movement trigger
                     if (!(v.last_coord == Coord{coord})) {
-                        v.current_pos = GetWorldPos(v.last_coord);
+                        if (v.was_dragged) {
+                            v.was_dragged = false;
+                        } else {
+                            v.current_pos = GetWorldPos(v.last_coord);
+                        }
                         v.target_pos = wpos;
                         v.move_time = 0.0f;
                         v.last_coord = Coord{coord};
@@ -407,7 +411,11 @@ void GameApp::Update() {
             } else {
                 VisualSlime &v = slimes_[u_ptr];
                 if (!(v.last_coord == Coord{coord})) {
-                    v.current_pos = GetWorldPos(v.last_coord);
+                    if (v.was_dragged) {
+                        v.was_dragged = false;
+                    } else {
+                        v.current_pos = GetWorldPos(v.last_coord);
+                    }
                     v.target_pos = wpos;
                     v.move_time = 0.0f;
                     v.last_coord = Coord{coord};
@@ -620,6 +628,7 @@ void GameApp::HandleInputs() {
                             Vector3 hit = Vector3Add(
                                 ray.position, Vector3Scale(ray.direction, t));
                             slimes_[src_u].current_pos = hit;
+                            slimes_[src_u].was_dragged = true;
                         }
                     }
 

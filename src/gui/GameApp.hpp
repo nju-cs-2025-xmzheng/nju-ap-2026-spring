@@ -26,6 +26,7 @@ struct VisualSlime {
     int last_mana = 0;
     engine::Coord last_coord = engine::HexCoord{-1, -1};
     bool initialized = false;
+    bool was_dragged = false;
 };
 
 struct VisualProjectile {

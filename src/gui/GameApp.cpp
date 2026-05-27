@@ -136,18 +136,18 @@ Vector3 GameApp::GetHexWorldPos(engine::HexCoord coord) {
 Vector3 GameApp::GetBenchWorldPos(int slot) {
     float spacing = 1.0f;
     float vertical_spacing = spacing * 0.866f;
-    // Position Bench in a horizontal line in front of the board (Z-forward)
+    float gap = 0.3f;
     float cx = (slot - 3.5f) * spacing;
-    float cz = 3.5f * vertical_spacing + 1.2f * spacing;
+    float cz = 4.5f * vertical_spacing + gap;
     return {cx, 0.0f, cz};
 }
 
 Vector3 GameApp::GetEquipWorldPos(int slot) {
     float spacing = 1.0f;
     float vertical_spacing = spacing * 0.866f;
-    // Position Equipment pool below the bench
-    float cx = (slot - 3.5f) * spacing;
-    float cz = 3.5f * vertical_spacing + 1.2f * spacing + 1.0f * spacing;
+    float gap = 0.3f;
+    float cx = (slot + 0.5f - 3.5f) * spacing;
+    float cz = 5.5f * vertical_spacing + gap;
     return {cx, 0.0f, cz};
 }
 
@@ -1036,11 +1036,8 @@ void GameApp::DrawGame3D() {
 }
 
 void GameApp::DrawHexCell(const Vector3 &pos, Color color, bool highlight) {
-    // A cylinder with 6 slices is a hexagonal prism. We rotate by 30 degrees
-    // (pi/6) around the Y axis so flat edges are parallel to horizontal
-    // neighbor lines.
     Vector3 rotationAxis = {0.0f, 1.0f, 0.0f};
-    float rotationAngle = 30.0f; // degrees
+    float rotationAngle = 0.0f;
 
     DrawModelEx(hex_model_, pos, rotationAxis, rotationAngle,
                 {1.0f, 1.0f, 1.0f}, color);

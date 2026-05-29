@@ -93,13 +93,14 @@ GameApp::GameApp() {
     hex_model_ = LoadModelFromMesh(hexMesh);
 
     // 4. Load Exo 2 Fonts (high-res load using LoadFontEx)
-    font_regular_ = LoadFontEx("Exo2-Regular.ttf", 96, NULL, 0);
+    font_regular_ = LoadFontEx("assets/fonts/Exo2-Regular.ttf", 96, NULL, 0);
     if (font_regular_.texture.id == 0) {
-        font_regular_ = LoadFontEx("../Exo2-Regular.ttf", 96, NULL, 0);
+        font_regular_ =
+            LoadFontEx("../assets/fonts/Exo2-Regular.ttf", 96, NULL, 0);
     }
-    font_bold_ = LoadFontEx("Exo2-Bold.ttf", 96, NULL, 0);
+    font_bold_ = LoadFontEx("assets/fonts/Exo2-Bold.ttf", 96, NULL, 0);
     if (font_bold_.texture.id == 0) {
-        font_bold_ = LoadFontEx("../Exo2-Bold.ttf", 96, NULL, 0);
+        font_bold_ = LoadFontEx("../assets/fonts/Exo2-Bold.ttf", 96, NULL, 0);
     }
 
     if (font_regular_.texture.id != 0) {

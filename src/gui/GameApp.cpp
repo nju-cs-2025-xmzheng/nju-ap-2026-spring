@@ -72,8 +72,7 @@ GameApp::GameApp() {
     // 1. Initialize Raylib window
     const int screenWidth = 1280;
     const int screenHeight = 720;
-    InitWindow(screenWidth, screenHeight,
-               "Synera: Synergy Auto-Arena (3D Raylib)");
+    InitWindow(screenWidth, screenHeight, "Synera: Slime Tactics");
     SetTargetFPS(60);
 
     // 2. Initialize Camera

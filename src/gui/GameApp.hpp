@@ -115,6 +115,8 @@ class GameApp {
 
     // 3D Models and Fonts
     Model hex_model_;
+    Model arena_model_;
+    Shader alpha_shader_;
     Font font_regular_;
     Font font_bold_;
 

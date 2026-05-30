@@ -76,7 +76,7 @@ GameApp::GameApp() {
     SetTargetFPS(60);
 
     // 2. Initialize Camera
-    camera_.position = {0.0f, 15.0f, 10.0f};
+    camera_.position = {0.0f, -25.0f, 10.0f};
     camera_.target = {0.0f, 0.0f, 3.0f};
     camera_.up = {0.0f, 1.0f, 0.0f};
     camera_.fovy = 45.0f;
@@ -108,10 +108,68 @@ GameApp::GameApp() {
     if (font_bold_.texture.id != 0) {
         SetTextureFilter(font_bold_.texture, TEXTURE_FILTER_BILINEAR);
     }
+
+    // 4.5. Load custom alpha-discard shader to prevent black backgrounds on transparent textures
+    const char *alphaVs = R"(
+        #version 330
+        in vec3 vertexPosition;
+        in vec2 vertexTexCoord;
+        in vec4 vertexColor;
+        out vec2 fragTexCoord;
+        out vec4 fragColor;
+        uniform mat4 mvp;
+        void main() {
+            fragTexCoord = vertexTexCoord;
+            fragColor = vertexColor;
+            gl_Position = mvp * vec4(vertexPosition, 1.0);
+        }
+    )";
+
+    const char *alphaFs = R"(
+        #version 330
+        in vec2 fragTexCoord;
+        in vec4 fragColor;
+        out vec4 finalColor;
+        uniform sampler2D texture0;
+        uniform vec4 colDiffuse;
+        void main() {
+            vec4 texelColor = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
+            if (texelColor.a < 0.1) discard;
+            finalColor = texelColor;
+        }
+    )";
+    alpha_shader_ = LoadShaderFromMemory(alphaVs, alphaFs);
+
+    // 5. Load Arena Model (Minecraft-style landscape GLB)
+    if (FileExists("assets/scenes/arena/arena.glb")) {
+        arena_model_ = LoadModel("assets/scenes/arena/arena.glb");
+    } else if (FileExists("../assets/scenes/arena/arena.glb")) {
+        arena_model_ = LoadModel("../assets/scenes/arena/arena.glb");
+    } else {
+        arena_model_ = {0};
+    }
+
+    // Set texture filter to POINT for pixelated/voxel look and apply alpha discard shader
+    if (arena_model_.meshCount > 0 && arena_model_.materials != nullptr) {
+        for (int i = 0; i < arena_model_.materialCount; ++i) {
+            arena_model_.materials[i].shader = alpha_shader_;
+            if (arena_model_.materials[i].maps != nullptr &&
+                arena_model_.materials[i].maps[MATERIAL_MAP_ALBEDO].texture.id >
+                    0) {
+                SetTextureFilter(
+                    arena_model_.materials[i].maps[MATERIAL_MAP_ALBEDO].texture,
+                    TEXTURE_FILTER_POINT);
+            }
+        }
+    }
 }
 
 GameApp::~GameApp() {
     UnloadModel(hex_model_);
+    if (arena_model_.meshCount > 0) {
+        UnloadModel(arena_model_);
+    }
+    UnloadShader(alpha_shader_);
     UnloadFont(font_regular_);
     UnloadFont(font_bold_);
     CloseWindow();
@@ -794,6 +852,12 @@ void GameApp::Draw() {
 }
 
 void GameApp::DrawGame3D() {
+    // Draw Arena Background Scene
+    if (arena_model_.meshCount > 0) {
+        DrawModelEx(arena_model_, {0.0f, -2.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, 0.0f,
+                    {0.3f, 0.3f, 0.3f}, WHITE);
+    }
+
     engine::Board &active_board = is_combat_ ? combat_board_ : session_.board_;
 
     // 1. Draw Board hexagonal cells

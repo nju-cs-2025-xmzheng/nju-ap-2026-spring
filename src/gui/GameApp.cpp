@@ -109,18 +109,23 @@ GameApp::GameApp() {
         SetTextureFilter(font_bold_.texture, TEXTURE_FILTER_BILINEAR);
     }
 
-    // 4.5. Load custom alpha-discard shader to prevent black backgrounds on transparent textures
+    // 4.5. Load custom alpha-discard shader with directional lighting to
+    // prevent black backgrounds on transparent textures and add depth/shading
     const char *alphaVs = R"(
         #version 330
         in vec3 vertexPosition;
+        in vec3 vertexNormal;
         in vec2 vertexTexCoord;
         in vec4 vertexColor;
         out vec2 fragTexCoord;
         out vec4 fragColor;
+        out vec3 fragNormal;
         uniform mat4 mvp;
+        uniform mat4 matModel;
         void main() {
             fragTexCoord = vertexTexCoord;
             fragColor = vertexColor;
+            fragNormal = normalize(vec3(matModel * vec4(vertexNormal, 0.0)));
             gl_Position = mvp * vec4(vertexPosition, 1.0);
         }
     )";
@@ -129,16 +134,28 @@ GameApp::GameApp() {
         #version 330
         in vec2 fragTexCoord;
         in vec4 fragColor;
+        in vec3 fragNormal;
         out vec4 finalColor;
         uniform sampler2D texture0;
         uniform vec4 colDiffuse;
         void main() {
             vec4 texelColor = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
             if (texelColor.a < 0.1) discard;
-            finalColor = texelColor;
+            
+            // Simple directional light (from top-right-front)
+            vec3 lightDir = normalize(vec3(0.4, 0.9, 0.3));
+            float diff = max(dot(normalize(fragNormal), lightDir), 0.0);
+            
+            // Ambient light (base visibility)
+            float ambient = 0.35;
+            // Combined light intensity factor
+            float light = min(ambient + diff * 0.65, 1.0);
+            
+            finalColor = vec4(texelColor.rgb * light, texelColor.a);
         }
     )";
     alpha_shader_ = LoadShaderFromMemory(alphaVs, alphaFs);
+    hex_model_.materials[0].shader = alpha_shader_;
 
     // 5. Load Arena Model (Minecraft-style landscape GLB)
     if (FileExists("assets/scenes/arena/arena.glb")) {
@@ -149,7 +166,8 @@ GameApp::GameApp() {
         arena_model_ = {0};
     }
 
-    // Set texture filter to POINT for pixelated/voxel look and apply alpha discard shader
+    // Set texture filter to POINT for pixelated/voxel look and apply alpha
+    // discard shader
     if (arena_model_.meshCount > 0 && arena_model_.materials != nullptr) {
         for (int i = 0; i < arena_model_.materialCount; ++i) {
             arena_model_.materials[i].shader = alpha_shader_;
@@ -854,7 +872,7 @@ void GameApp::Draw() {
 void GameApp::DrawGame3D() {
     // Draw Arena Background Scene
     if (arena_model_.meshCount > 0) {
-        DrawModelEx(arena_model_, {0.0f, -2.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, 0.0f,
+        DrawModelEx(arena_model_, {0.0f, -2.1f, 0.0f}, {0.0f, 1.0f, 0.0f}, 0.0f,
                     {0.3f, 0.3f, 0.3f}, WHITE);
     }
 
@@ -1112,13 +1130,15 @@ void GameApp::DrawHexCell(const Vector3 &pos, Color color, bool highlight) {
     Vector3 rotationAxis = {0.0f, 1.0f, 0.0f};
     float rotationAngle = 0.0f;
 
-    DrawModelEx(hex_model_, pos, rotationAxis, rotationAngle,
-                {1.0f, 1.0f, 1.0f}, color);
+    Color render_color = color;
+    if (highlight) {
+        // Blend the cell color with a semi-transparent GOLD overlay for a
+        // premium glowing highlight
+        render_color = ColorAlphaBlend(color, Fade(GOLD, 0.2f), WHITE);
+    }
 
-    // Draw wireframe outline to make cells distinct
-    Color wire_color = highlight ? YELLOW : Color{35, 35, 45, 255};
-    DrawModelWiresEx(hex_model_, pos, rotationAxis, rotationAngle,
-                     {1.01f, 1.01f, 1.01f}, wire_color);
+    DrawModelEx(hex_model_, pos, rotationAxis, rotationAngle,
+                {1.0f, 1.0f, 1.0f}, render_color);
 }
 
 void GameApp::DrawSlime(const Vector3 &pos, float scale, unit::Element elem,

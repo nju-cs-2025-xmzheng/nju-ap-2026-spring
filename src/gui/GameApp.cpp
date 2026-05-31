@@ -76,7 +76,7 @@ GameApp::GameApp() {
     SetTargetFPS(60);
 
     // 2. Initialize Camera
-    camera_.position = {0.0f, -25.0f, 10.0f};
+    camera_.position = {0.0f, 50.0f, 30.0f};
     camera_.target = {0.0f, 0.0f, 3.0f};
     camera_.up = {0.0f, 1.0f, 0.0f};
     camera_.fovy = 45.0f;
@@ -872,8 +872,8 @@ void GameApp::Draw() {
 void GameApp::DrawGame3D() {
     // Draw Arena Background Scene
     if (arena_model_.meshCount > 0) {
-        DrawModelEx(arena_model_, {0.0f, -2.1f, 0.0f}, {0.0f, 1.0f, 0.0f}, 0.0f,
-                    {0.3f, 0.3f, 0.3f}, WHITE);
+        DrawModelEx(arena_model_, {0.0f, -3.2f, -5.0f}, {0.0f, 1.0f, 0.0f},
+                    0.0f, {0.6f, 0.6f, 0.6f}, WHITE);
     }
 
     engine::Board &active_board = is_combat_ ? combat_board_ : session_.board_;

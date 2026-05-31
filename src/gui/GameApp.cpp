@@ -1467,10 +1467,11 @@ void GameApp::DrawGame2D() {
         "SAVE", 1055, 600, 82, 45, Color{70, 70, 75, 255},
         Color{90, 90, 95, 255},
         [&]() {
-            std::string file = "save_session.txt";
+            std::string file =
+                std::string(GetApplicationDirectory()) + "save_session.txt";
             bool ok = save(session_, file);
             if (ok) {
-                status_msg_ = "Game saved successfully to save_session.txt!";
+                status_msg_ = "Game saved successfully!";
                 status_msg_timer_ = 2.5f;
             } else {
                 status_msg_ = "Failed to save game!";
@@ -1484,13 +1485,22 @@ void GameApp::DrawGame2D() {
         "LOAD", 1148, 600, 82, 45, Color{70, 70, 75, 255},
         Color{90, 90, 95, 255},
         [&]() {
-            std::string file = "save_session.txt";
+            std::string file =
+                std::string(GetApplicationDirectory()) + "save_session.txt";
             bool ok = load(session_, file);
             if (ok) {
+                prep_board_copy_ = clone_board(session_.board_);
+                // Clear any selection/drag states to prevent visual issues
+                has_selection_ = false;
+                is_dragging_ = false;
+                selected_equip_index_ = -1;
+                is_dragging_equip_ = false;
+                drag_equip_source_index_ = -1;
+
                 // Re-sync visual slimes
                 slimes_.clear();
                 projectiles_.clear();
-                status_msg_ = "Game loaded successfully from save_session.txt!";
+                status_msg_ = "Game loaded successfully!";
                 status_msg_timer_ = 2.5f;
             } else {
                 status_msg_ = "Failed to load game!";

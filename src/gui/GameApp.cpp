@@ -5,6 +5,7 @@
 #include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -734,7 +735,28 @@ void GameApp::DrawMainMenu() {
                 label = "Slot " + std::to_string(i) + ": [Empty Slot]";
             }
 
-            if (draw_menu_btn(label.c_str(), 230 + (i - 1) * 65, true)) {
+            int slot_y = 230 + (i - 1) * 65;
+            int slot_x = 640 - 140;
+            int slot_w = meta.exists ? 210 : 280;
+            int slot_h = 45;
+
+            // Draw slot button
+            bool slot_hover = CheckCollisionPointRec(
+                GetMousePosition(),
+                {(float)slot_x, (float)slot_y, (float)slot_w, (float)slot_h});
+            Color slot_base =
+                slot_hover ? Color{50, 60, 90, 255} : Color{30, 30, 38, 255};
+            Color slot_border = slot_hover ? GOLD : Color{80, 80, 100, 255};
+            Color slot_text_color = slot_hover ? WHITE : LIGHTGRAY;
+
+            DrawRectangle(slot_x, slot_y, slot_w, slot_h, slot_base);
+            DrawRectangleLines(slot_x, slot_y, slot_w, slot_h, slot_border);
+
+            int text_w = MeasureGameText(label.c_str(), 14, true);
+            DrawGameText(label.c_str(), slot_x + slot_w / 2 - text_w / 2,
+                         slot_y + 15, 14, slot_text_color, true);
+
+            if (slot_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 std::string file = std::string(GetApplicationDirectory()) +
                                    "save_slot_" + std::to_string(i) + ".txt";
                 if (is_saving_mode_) {
@@ -752,15 +774,12 @@ void GameApp::DrawMainMenu() {
                         bool ok = load(session_, file);
                         if (ok) {
                             prep_board_copy_ = clone_board(session_.board_);
-                            // Clear selection/drag states to prevent visual
-                            // issues
                             has_selection_ = false;
                             is_dragging_ = false;
                             selected_equip_index_ = -1;
                             is_dragging_equip_ = false;
                             drag_equip_source_index_ = -1;
 
-                            // Re-sync visual slimes
                             slimes_.clear();
                             projectiles_.clear();
                             game_in_progress_ = true;
@@ -775,6 +794,35 @@ void GameApp::DrawMainMenu() {
                     }
                     status_msg_timer_ = 2.5f;
                     is_slot_menu_ = false;
+                }
+            }
+
+            // Draw delete button if slot exists
+            if (meta.exists) {
+                int del_x = slot_x + slot_w + 10;
+                int del_w = 60;
+                bool del_hover = CheckCollisionPointRec(
+                    GetMousePosition(),
+                    {(float)del_x, (float)slot_y, (float)del_w, (float)slot_h});
+                Color del_base = del_hover ? Color{180, 50, 50, 255}
+                                           : Color{120, 30, 30, 255};
+                Color del_border = del_hover ? RED : Color{160, 50, 50, 255};
+
+                DrawRectangle(del_x, slot_y, del_w, slot_h, del_base);
+                DrawRectangleLines(del_x, slot_y, del_w, slot_h, del_border);
+
+                int del_text_w = MeasureGameText("DEL", 14, true);
+                DrawGameText("DEL", del_x + del_w / 2 - del_text_w / 2,
+                             slot_y + 15, 14, WHITE, true);
+
+                if (del_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    std::string file = std::string(GetApplicationDirectory()) +
+                                       "save_slot_" + std::to_string(i) +
+                                       ".txt";
+                    std::remove(file.c_str());
+                    status_msg_ =
+                        "Slot " + std::to_string(i) + " deleted successfully.";
+                    status_msg_timer_ = 2.0f;
                 }
             }
         }

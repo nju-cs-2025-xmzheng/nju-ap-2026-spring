@@ -143,6 +143,7 @@ class GameApp {
     bool is_slot_menu_ = false;
     bool is_saving_mode_ = false;
     bool exit_flag_ = false;
+    float menu_transition_cooldown_ = 0.0f;
 };
 
 } // namespace Synera::gui

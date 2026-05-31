@@ -368,9 +368,12 @@ void GameApp::Update() {
     camera_.target =
         Vector3Lerp(camera_.target, target_cam_target_, GetFrameTime() * 4.0f);
 
-    // 2. Decrement status message timer
+    // 2. Decrement status message timer and menu cooldowns
     if (status_msg_timer_ > 0.0f) {
         status_msg_timer_ -= GetFrameTime();
+    }
+    if (menu_transition_cooldown_ > 0.0f) {
+        menu_transition_cooldown_ -= GetFrameTime();
     }
 
     // 3. Handle inputs depending on state
@@ -384,6 +387,7 @@ void GameApp::Update() {
         }
         if (IsKeyPressed(KEY_ESCAPE)) {
             state_ = GameState::MainMenu;
+            menu_transition_cooldown_ = 0.2f;
             is_slot_menu_ = false;
             // Clear selection and dragging states to avoid visual artifacts
             has_selection_ = false;
@@ -644,6 +648,7 @@ void GameApp::Update() {
 void GameApp::UpdateStartMenu() {
     if (GetKeyPressed() != 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         state_ = GameState::MainMenu;
+        menu_transition_cooldown_ = 0.25f;
     }
 }
 
@@ -714,7 +719,7 @@ void GameApp::DrawMainMenu() {
         DrawGameText(text, x + w / 2 - text_w / 2, y + 13, 18, text_color,
                      true);
 
-        return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+        return hover && (menu_transition_cooldown_ <= 0.0f) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     };
 
     if (is_slot_menu_) {
@@ -756,7 +761,7 @@ void GameApp::DrawMainMenu() {
             DrawGameText(label.c_str(), slot_x + slot_w / 2 - text_w / 2,
                          slot_y + 15, 14, slot_text_color, true);
 
-            if (slot_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (slot_hover && (menu_transition_cooldown_ <= 0.0f) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 std::string file = std::string(GetApplicationDirectory()) +
                                    "save_slot_" + std::to_string(i) + ".txt";
                 if (is_saving_mode_) {
@@ -815,7 +820,7 @@ void GameApp::DrawMainMenu() {
                 DrawGameText("DEL", del_x + del_w / 2 - del_text_w / 2,
                              slot_y + 15, 14, WHITE, true);
 
-                if (del_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (del_hover && (menu_transition_cooldown_ <= 0.0f) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     std::string file = std::string(GetApplicationDirectory()) +
                                        "save_slot_" + std::to_string(i) +
                                        ".txt";

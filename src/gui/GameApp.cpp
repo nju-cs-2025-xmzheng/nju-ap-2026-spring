@@ -123,6 +123,7 @@ GameApp::GameApp() {
     const int screenWidth = 1280;
     const int screenHeight = 720;
     InitWindow(screenWidth, screenHeight, "Synera: Slime Tactics");
+    SetExitKey(KEY_NULL);
     SetTargetFPS(60);
 
     // 2. Initialize Camera

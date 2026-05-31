@@ -6,11 +6,61 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
 
 namespace Synera::gui {
 
 using namespace Synera::engine;
 using namespace Synera::unit;
+
+struct SaveMetadata {
+    bool exists = false;
+    int hp = 0;
+    int gold = 0;
+    int level = 0;
+    int round = 0;
+};
+
+static SaveMetadata GetSaveMetadata(int slot) {
+    SaveMetadata meta;
+    std::string filepath = std::string(GetApplicationDirectory()) +
+                           "save_slot_" + std::to_string(slot) + ".txt";
+    std::ifstream in(filepath);
+    if (!in) {
+        meta.exists = false;
+        return meta;
+    }
+    meta.exists = true;
+    std::string line;
+    std::string section = "";
+    while (std::getline(in, line)) {
+        if (line.empty())
+            continue;
+        if (line == "[player]") {
+            section = "player";
+            continue;
+        } else if (line.starts_with("[")) {
+            break; // only need player info
+        }
+        if (section == "player") {
+            std::istringstream iss(line);
+            std::string key;
+            int val;
+            if (iss >> key >> val) {
+                if (key == "hp")
+                    meta.hp = val;
+                else if (key == "gold")
+                    meta.gold = val;
+                else if (key == "level")
+                    meta.level = val;
+                else if (key == "round")
+                    meta.round = val;
+            }
+        }
+    }
+    return meta;
+}
 
 Board clone_board(const Board &src) {
     Board dst;
@@ -194,7 +244,7 @@ GameApp::~GameApp() {
 }
 
 void GameApp::Run() {
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !exit_flag_) {
         Update();
         Draw();
     }
@@ -294,13 +344,22 @@ bool GameApp::IsMouseOverUI() {
 }
 
 void GameApp::Update() {
-    // 1. Smoothly interpolate camera position and target depending on phase
-    if (is_combat_) {
-        target_cam_pos_ = {0.0f, 15.0f, 3.0f};
-        target_cam_target_ = {0.0f, 0.0f, 1.4f};
-    } else {
-        target_cam_pos_ = {0.0f, 8.5f, 9.0f};
-        target_cam_target_ = {0.0f, 0.0f, 4.2f};
+    // 1. Smoothly interpolate camera position and target depending on
+    // state/phase
+    if (state_ == GameState::StartMenu) {
+        target_cam_pos_ = {0.0f, 50.0f, 30.0f};
+        target_cam_target_ = {0.0f, 0.0f, 0.0f};
+    } else if (state_ == GameState::MainMenu) {
+        target_cam_pos_ = {0.0f, 3.0f, 30.0f};
+        target_cam_target_ = {0.0f, 0.0f, 0.0f};
+    } else { // GameState::Gameplay
+        if (is_combat_) {
+            target_cam_pos_ = {0.0f, 15.0f, 3.0f};
+            target_cam_target_ = {0.0f, 0.0f, 1.4f};
+        } else {
+            target_cam_pos_ = {0.0f, 8.5f, 9.0f};
+            target_cam_target_ = {0.0f, 0.0f, 4.2f};
+        }
     }
     camera_.position =
         Vector3Lerp(camera_.position, target_cam_pos_, GetFrameTime() * 4.0f);
@@ -312,9 +371,27 @@ void GameApp::Update() {
         status_msg_timer_ -= GetFrameTime();
     }
 
-    // 3. Handle inputs (clicking/dragging/actions) in Prep phase
-    if (!is_combat_) {
-        HandleInputs();
+    // 3. Handle inputs depending on state
+    if (state_ == GameState::StartMenu) {
+        UpdateStartMenu();
+    } else if (state_ == GameState::MainMenu) {
+        UpdateMainMenu();
+    } else {
+        if (!is_combat_) {
+            HandleInputs();
+        }
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            state_ = GameState::MainMenu;
+            is_slot_menu_ = false;
+            // Clear selection and dragging states to avoid visual artifacts
+            has_selection_ = false;
+            is_dragging_ = false;
+            has_hover_ = false;
+            hovered_equip_index_ = -1;
+            selected_equip_index_ = -1;
+            is_dragging_equip_ = false;
+            drag_equip_source_index_ = -1;
+        }
     }
 
     // 4. Combat loop update
@@ -559,6 +636,204 @@ void GameApp::Update() {
             }
         }
         ++it;
+    }
+}
+
+void GameApp::UpdateStartMenu() {
+    if (GetKeyPressed() != 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        state_ = GameState::MainMenu;
+    }
+}
+
+void GameApp::DrawStartMenu() {
+    DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 0.4f));
+
+    const char *title = "Synera: Slime Tactics";
+    int fontSize = 64;
+    int textWidth = MeasureGameText(title, fontSize, true);
+    int posX = 640 - textWidth / 2;
+    int posY = 280;
+
+    // Glowing border/shadow effect
+    DrawGameText(title, posX - 2, posY - 2, fontSize, BLACK, true);
+    DrawGameText(title, posX + 2, posY - 2, fontSize, BLACK, true);
+    DrawGameText(title, posX - 2, posY + 2, fontSize, BLACK, true);
+    DrawGameText(title, posX + 2, posY + 2, fontSize, BLACK, true);
+    DrawGameText(title, posX, posY, fontSize, GOLD, true);
+
+    // Pulse prompt
+    float pulse = sin(GetTime() * 3.0f) * 0.5f + 0.5f;
+    Color promptColor = Fade(LIGHTGRAY, 0.3f + pulse * 0.7f);
+    const char *prompt = "PRESS ANY KEY TO START";
+    int promptSize = 22;
+    int promptWidth = MeasureGameText(prompt, promptSize, false);
+    DrawGameText(prompt, 640 - promptWidth / 2, 420, promptSize, promptColor,
+                 false);
+}
+
+void GameApp::UpdateMainMenu() {
+    if (game_in_progress_ && IsKeyPressed(KEY_ESCAPE)) {
+        state_ = GameState::Gameplay;
+    }
+}
+
+void GameApp::DrawMainMenu() {
+    DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 0.55f));
+
+    const char *title = "Synera: Slime Tactics";
+    int fontSize = 48;
+    int textWidth = MeasureGameText(title, fontSize, true);
+    DrawGameText(title, 640 - textWidth / 2, 100, fontSize, GOLD, true);
+
+    if (game_in_progress_) {
+        const char *status = "GAME PAUSED";
+        int statusWidth = MeasureGameText(status, 16, false);
+        DrawGameText(status, 640 - statusWidth / 2, 160, 16, GRAY, false);
+    }
+
+    auto draw_menu_btn = [&](const char *text, int y, bool enabled) -> bool {
+        int x = 640 - 140;
+        int w = 280;
+        int h = 45;
+        bool hover = enabled && CheckCollisionPointRec(
+                                    GetMousePosition(),
+                                    {(float)x, (float)y, (float)w, (float)h});
+
+        Color base_color =
+            hover ? Color{50, 60, 90, 255} : Color{30, 30, 38, 255};
+        Color border_color = enabled ? (hover ? GOLD : Color{80, 80, 100, 255})
+                                     : Color{50, 50, 55, 255};
+        Color text_color = enabled ? (hover ? WHITE : LIGHTGRAY) : GRAY;
+
+        DrawRectangle(x, y, w, h, base_color);
+        DrawRectangleLines(x, y, w, h, border_color);
+
+        int text_w = MeasureGameText(text, 18, true);
+        DrawGameText(text, x + w / 2 - text_w / 2, y + 13, 18, text_color,
+                     true);
+
+        return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    };
+
+    if (is_slot_menu_) {
+        const char *subTitle =
+            is_saving_mode_ ? "SELECT SAVE SLOT" : "SELECT LOAD SLOT";
+        int subWidth = MeasureGameText(subTitle, 24, true);
+        DrawGameText(subTitle, 640 - subWidth / 2, 180, 24, GOLD, true);
+
+        for (int i = 1; i <= 3; ++i) {
+            SaveMetadata meta = GetSaveMetadata(i);
+            std::string label;
+            if (meta.exists) {
+                label = "Slot " + std::to_string(i) + ": Rd " +
+                        std::to_string(meta.round) + " (Lvl " +
+                        std::to_string(meta.level) + ", " +
+                        std::to_string(meta.gold) + "G)";
+            } else {
+                label = "Slot " + std::to_string(i) + ": [Empty Slot]";
+            }
+
+            if (draw_menu_btn(label.c_str(), 230 + (i - 1) * 65, true)) {
+                std::string file = std::string(GetApplicationDirectory()) +
+                                   "save_slot_" + std::to_string(i) + ".txt";
+                if (is_saving_mode_) {
+                    bool ok = save(session_, file);
+                    if (ok) {
+                        status_msg_ = "Game saved to Slot " +
+                                      std::to_string(i) + " successfully!";
+                    } else {
+                        status_msg_ = "Failed to save game!";
+                    }
+                    status_msg_timer_ = 2.5f;
+                    is_slot_menu_ = false;
+                } else {
+                    if (meta.exists) {
+                        bool ok = load(session_, file);
+                        if (ok) {
+                            prep_board_copy_ = clone_board(session_.board_);
+                            // Clear selection/drag states to prevent visual
+                            // issues
+                            has_selection_ = false;
+                            is_dragging_ = false;
+                            selected_equip_index_ = -1;
+                            is_dragging_equip_ = false;
+                            drag_equip_source_index_ = -1;
+
+                            // Re-sync visual slimes
+                            slimes_.clear();
+                            projectiles_.clear();
+                            game_in_progress_ = true;
+                            state_ = GameState::Gameplay;
+                            status_msg_ = "Game loaded from Slot " +
+                                          std::to_string(i) + " successfully!";
+                        } else {
+                            status_msg_ = "Failed to load game!";
+                        }
+                    } else {
+                        status_msg_ = "Slot is empty!";
+                    }
+                    status_msg_timer_ = 2.5f;
+                    is_slot_menu_ = false;
+                }
+            }
+        }
+
+        if (draw_menu_btn("Back", 440, true)) {
+            is_slot_menu_ = false;
+        }
+    } else {
+        // Button 1: Single Player or Continue Game
+        const char *btn1_text =
+            game_in_progress_ ? "Continue Game" : "Single Player";
+        if (draw_menu_btn(btn1_text, 220, true)) {
+            if (game_in_progress_) {
+                state_ = GameState::Gameplay;
+            } else {
+                // Start a brand new session
+                session_ = engine::GameSession();
+                slimes_.clear();
+                projectiles_.clear();
+                game_in_progress_ = true;
+                state_ = GameState::Gameplay;
+                status_msg_ =
+                    "New Game Started - Drag and drop units to position them.";
+                status_msg_timer_ = 3.0f;
+            }
+        }
+
+        // Button 2: Multiplayer (Reserved) or Exit Game
+        const char *btn2_text =
+            game_in_progress_ ? "Exit Game" : "Multiplayer (Reserved)";
+        bool btn2_enabled =
+            game_in_progress_; // disabled originally (Multiplayer is reserved)
+        if (draw_menu_btn(btn2_text, 280, btn2_enabled)) {
+            if (game_in_progress_) {
+                // Reset session and return to main menu
+                game_in_progress_ = false;
+                session_ = engine::GameSession();
+                slimes_.clear();
+                projectiles_.clear();
+                status_msg_ = "Returned to Main Menu.";
+                status_msg_timer_ = 2.0f;
+            }
+        }
+
+        // Button 3: Save Game (enabled only when in progress)
+        if (draw_menu_btn("Save Game", 340, game_in_progress_)) {
+            is_slot_menu_ = true;
+            is_saving_mode_ = true;
+        }
+
+        // Button 4: Load Game (always enabled)
+        if (draw_menu_btn("Load Game", 400, true)) {
+            is_slot_menu_ = true;
+            is_saving_mode_ = false;
+        }
+
+        // Button 5: Quit
+        if (draw_menu_btn("Quit", 460, true)) {
+            exit_flag_ = true;
+        }
     }
 }
 
@@ -863,8 +1138,14 @@ void GameApp::Draw() {
     DrawGame3D();
     EndMode3D();
 
-    // 2. Draw 2D UI overlay
-    DrawGame2D();
+    // 2. Draw 2D UI overlay based on state
+    if (state_ == GameState::StartMenu) {
+        DrawStartMenu();
+    } else if (state_ == GameState::MainMenu) {
+        DrawMainMenu();
+    } else {
+        DrawGame2D();
+    }
 
     EndDrawing();
 }
@@ -872,7 +1153,7 @@ void GameApp::Draw() {
 void GameApp::DrawGame3D() {
     // Draw Arena Background Scene
     if (arena_model_.meshCount > 0) {
-        DrawModelEx(arena_model_, {0.0f, -3.2f, -5.0f}, {0.0f, 1.0f, 0.0f},
+        DrawModelEx(arena_model_, {0.3f, -3.2f, -5.0f}, {0.0f, 1.0f, 0.0f},
                     0.0f, {0.6f, 0.6f, 0.6f}, WHITE);
     }
 
@@ -1461,53 +1742,6 @@ void GameApp::DrawGame2D() {
     draw_combat_btn(
         combat_lbl.c_str(), 1055, 536, 175, 45, Color{30, 110, 45, 255},
         Color{40, 140, 55, 255}, [&]() { StartCombatPhase(); }, !is_combat_);
-
-    // Save Game
-    draw_combat_btn(
-        "SAVE", 1055, 600, 82, 45, Color{70, 70, 75, 255},
-        Color{90, 90, 95, 255},
-        [&]() {
-            std::string file =
-                std::string(GetApplicationDirectory()) + "save_session.txt";
-            bool ok = save(session_, file);
-            if (ok) {
-                status_msg_ = "Game saved successfully!";
-                status_msg_timer_ = 2.5f;
-            } else {
-                status_msg_ = "Failed to save game!";
-                status_msg_timer_ = 2.5f;
-            }
-        },
-        !is_combat_);
-
-    // Load Game
-    draw_combat_btn(
-        "LOAD", 1148, 600, 82, 45, Color{70, 70, 75, 255},
-        Color{90, 90, 95, 255},
-        [&]() {
-            std::string file =
-                std::string(GetApplicationDirectory()) + "save_session.txt";
-            bool ok = load(session_, file);
-            if (ok) {
-                prep_board_copy_ = clone_board(session_.board_);
-                // Clear any selection/drag states to prevent visual issues
-                has_selection_ = false;
-                is_dragging_ = false;
-                selected_equip_index_ = -1;
-                is_dragging_equip_ = false;
-                drag_equip_source_index_ = -1;
-
-                // Re-sync visual slimes
-                slimes_.clear();
-                projectiles_.clear();
-                status_msg_ = "Game loaded successfully!";
-                status_msg_timer_ = 2.5f;
-            } else {
-                status_msg_ = "Failed to load game!";
-                status_msg_timer_ = 2.5f;
-            }
-        },
-        !is_combat_);
 
     // Drag-to-Sell Zone
     if (!is_combat_) {

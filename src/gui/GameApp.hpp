@@ -40,6 +40,12 @@ struct VisualProjectile {
     float max_radius = 1.5f;
 };
 
+enum class GameState {
+    StartMenu,
+    MainMenu,
+    Gameplay
+};
+
 class GameApp {
   public:
     GameApp();
@@ -66,6 +72,12 @@ class GameApp {
     void StartCombatPhase();
     void ProcessCombatTick();
     void EndCombatPhase();
+
+    // Menu handlers
+    void UpdateStartMenu();
+    void DrawStartMenu();
+    void UpdateMainMenu();
+    void DrawMainMenu();
 
     // Draw helpers
     void DrawGame3D();
@@ -124,6 +136,13 @@ class GameApp {
     std::string status_msg_ =
         "Preparation Phase - Drag and drop units to position them.";
     float status_msg_timer_ = 0.0f;
+
+    // Menu and Save/Load states
+    GameState state_ = GameState::StartMenu;
+    bool game_in_progress_ = false;
+    bool is_slot_menu_ = false;
+    bool is_saving_mode_ = false;
+    bool exit_flag_ = false;
 };
 
 } // namespace Synera::gui

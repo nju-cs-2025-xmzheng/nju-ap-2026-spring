@@ -2,7 +2,7 @@
 #include <iostream>
 
 int main() {
-    std::cout << "Starting Synera: Synergy Auto-Arena (Raylib 3D)..." << std::endl;
+    std::cout << "Starting Synera: Slime Tactics..." << std::endl;
     Synera::gui::GameApp app;
     app.Run();
     return 0;

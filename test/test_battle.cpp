@@ -47,6 +47,33 @@ int main() {
                Synera::engine::CombatResult::EnemyWin);
     }
 
+    {
+        Synera::engine::Board draw_board;
+        Synera::engine::init_board(draw_board);
+        auto player = std::make_shared<Synera::unit::Unit>(
+            Synera::unit::PyroSlime(Synera::unit::Owner::PlayerCtrl, 1));
+        auto enemy = std::make_shared<Synera::unit::Unit>(
+            Synera::unit::PyroSlime(Synera::unit::Owner::EnemyCtrl, 1));
+        auto &player_stats = Synera::unit::stats(*player);
+        auto &enemy_stats = Synera::unit::stats(*enemy);
+        player_stats.hp = 1;
+        player_stats.atk = 5;
+        player_stats.state = Synera::unit::State::Attacking;
+        player_stats.attack_cooldown = 0;
+        enemy_stats.hp = 1;
+        enemy_stats.atk = 5;
+        enemy_stats.state = Synera::unit::State::Attacking;
+        enemy_stats.attack_cooldown = 0;
+        Synera::engine::set_unit(draw_board, Synera::engine::HexCoord{4, 0},
+                                 player);
+        Synera::engine::set_unit(draw_board, Synera::engine::HexCoord{3, 0},
+                                 enemy);
+
+        engine.tick(draw_board);
+        assert(engine.combat_result(draw_board) ==
+               Synera::engine::CombatResult::Draw);
+    }
+
     // 1. Verify Target Selection CPO
     auto target_opt = Synera::engine::select_target(
         board, *player_electro, Synera::engine::HexCoord{5, 2});

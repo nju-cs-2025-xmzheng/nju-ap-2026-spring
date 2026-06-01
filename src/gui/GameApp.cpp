@@ -1055,9 +1055,16 @@ void GameApp::DrawSettlement() {
     // Description text
     std::string desc1;
     std::string desc2;
+    bool multiplayer =
+        engine::mode_kind(mode_) != engine::ModeKind::SinglePlayer;
     if (player_won_game_) {
-        desc1 = "Congratulations! You have successfully survived";
-        desc2 = "all 20 rounds of Slime Tactics!";
+        if (multiplayer) {
+            desc1 = "Victory! Your opponent has been defeated.";
+            desc2 = "Return to the menu to start another duel.";
+        } else {
+            desc1 = "Congratulations! You have successfully survived";
+            desc2 = "all 20 rounds of Slime Tactics!";
+        }
     } else {
         desc1 = "Your forces fell. You reached Round " +
                 std::to_string(engine::session(mode_).round_) + ".";

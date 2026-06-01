@@ -18,6 +18,10 @@ class BattleEngine {
         struct ActiveUnit {
             std::shared_ptr<unit::Unit> unit;
             HexCoord coord;
+            unit::State state;
+            int attack_cooldown = 0;
+            int move_cooldown = 0;
+            int stun_ticks = 0;
         };
         std::vector<ActiveUnit> units;
 
@@ -25,8 +29,12 @@ class BattleEngine {
             for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
                 HexCoord cell{r, c};
                 if (auto u_ptr = get_unit(board, cell)) {
-                    if (unit::stats(*u_ptr).hp > 0) {
-                        units.push_back({u_ptr, cell});
+                    auto &stats = unit::stats(*u_ptr);
+                    if (stats.hp > 0) {
+                        units.push_back({u_ptr, cell, stats.state,
+                                         stats.attack_cooldown,
+                                         stats.move_cooldown,
+                                         stats.stun_ticks});
                     }
                 }
             }
@@ -35,11 +43,12 @@ class BattleEngine {
         for (auto &au : units) {
             auto &u = *au.unit;
             auto &stats = unit::stats(u);
-
-            // Skip if the unit died during this tick
-            if (stats.hp <= 0) {
-                stats.state = unit::State::Dead;
-                continue;
+            bool defeated_during_tick = stats.hp <= 0;
+            if (defeated_during_tick) {
+                stats.state = au.state;
+                stats.attack_cooldown = au.attack_cooldown;
+                stats.move_cooldown = au.move_cooldown;
+                stats.stun_ticks = au.stun_ticks;
             }
 
             // Stun logic: decrement stun ticks and skip action
@@ -158,6 +167,11 @@ class BattleEngine {
             case unit::State::Dead:
             default:
                 break;
+            }
+
+            if (stats.hp <= 0) {
+                stats.hp = 0;
+                stats.state = unit::State::Dead;
             }
         }
     }

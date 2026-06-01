@@ -3,6 +3,7 @@
 #include "engine/GameMode.hpp"
 #include "unit/Synergy.hpp"
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -249,6 +250,94 @@ inline int count_living_units(const Board &board, unit::Owner owner) {
     return count;
 }
 
+struct CombatScoreUpdate {
+    std::string status;
+    bool player_defeated = false;
+};
+
+inline constexpr int default_draw_damage() {
+    return 10;
+}
+
+inline unit::Equipment make_drop_for_element(unit::Element element) {
+    switch (element) {
+    case unit::Element::Pyro:
+        return unit::PyroDrop{};
+    case unit::Element::Hydro:
+        return unit::HydroDrop{};
+    case unit::Element::Anemo:
+        return unit::AnemoDrop{};
+    case unit::Element::Geo:
+        return unit::GeoDrop{};
+    case unit::Element::Electro:
+        return unit::ElectroDrop{};
+    case unit::Element::Cryo:
+        return unit::CryoDrop{};
+    }
+    return unit::PyroDrop{};
+}
+
+inline CombatScoreUpdate settle_combat_score_with_damage(
+    GameSession &session, CombatResult result, bool allow_equipment_drop,
+    int damage, int draw_reward_gold = 0) {
+    if (result == CombatResult::PlayerWin) {
+        int reward_gold = 2 + session.player_.level * 2;
+        session.player_.gold += reward_gold;
+        std::string status =
+            "VICTORY! Gained " + std::to_string(reward_gold) + " Gold.";
+
+        if (allow_equipment_drop && (std::rand() % 100) < 30) {
+            unit::Element random_elem =
+                static_cast<unit::Element>(std::rand() % 6);
+            session.equip_pool_.push_back(make_drop_for_element(random_elem));
+            status += " Equipment dropped!";
+        }
+        return {status, false};
+    }
+
+    std::string status;
+    if (result == CombatResult::Draw && draw_reward_gold > 0) {
+        session.player_.gold += draw_reward_gold;
+        status = "DRAW! Gained " + std::to_string(draw_reward_gold) +
+                 " Gold. Took ";
+    } else {
+        status = result == CombatResult::Draw ? "DRAW! Took "
+                                              : "DEFEAT! Took ";
+    }
+    session.player_.hp = std::max(0, session.player_.hp - damage);
+    status += std::to_string(damage) + " damage.";
+    if (session.player_.hp <= 0) {
+        status += " GAME OVER!";
+    }
+    return {status, session.player_.hp <= 0};
+}
+
+inline int combat_score_damage(const Board &combat_board, CombatResult result,
+                               unit::Owner opposing_owner =
+                                   unit::Owner::EnemyCtrl,
+                               int draw_damage = default_draw_damage()) {
+    if (result == CombatResult::Draw) {
+        return draw_damage;
+    }
+    int survivors = count_living_units(combat_board, opposing_owner);
+    return 10 + 2 * survivors;
+}
+
+inline CombatScoreUpdate settle_combat_score(GameSession &session,
+                                             const Board &combat_board,
+                                             CombatResult result,
+                                             bool allow_equipment_drop,
+                                             unit::Owner opposing_owner =
+                                                 unit::Owner::EnemyCtrl,
+                                             int draw_reward_gold = 0,
+                                             int draw_damage =
+                                                 default_draw_damage()) {
+    return settle_combat_score_with_damage(
+        session, result, allow_equipment_drop,
+        combat_score_damage(combat_board, result, opposing_owner, draw_damage),
+        draw_reward_gold);
+}
+
 inline std::string result_title(CombatResult result) {
     switch (result) {
     case CombatResult::PlayerWin:
@@ -320,9 +409,16 @@ inline ModeUpdate advance_to_next_preparation(GameSession &session,
     int interest = std::min(5, session.player_.gold / 10);
     session.player_.gold += base_gold + interest;
 
+    std::string status = "Round " + std::to_string(session.round_) +
+                         " Started! Gained " + std::to_string(base_gold) +
+                         " Gold";
+    if (interest > 0) {
+        status += " + " + std::to_string(interest) + " interest";
+    }
+    status += ".";
+
     return ModeUpdate{
-        "Preparation Phase - Drag and drop units to position them.", 3.0f,
-        true, false, false, false};
+        status, 3.0f, true, false, false, false};
 }
 
 } // namespace Synera::engine

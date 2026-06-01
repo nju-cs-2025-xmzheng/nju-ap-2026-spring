@@ -25,6 +25,8 @@ class LanMultiplayerMode {
     CombatResult combat_result_ = CombatResult::Ongoing;
     bool player_won_game_ = false;
     int ticks_elapsed_ = 0;
+    int remote_hp_before_ = 100;
+    int remote_hp_after_ = 100;
 
     LanMultiplayerMode() {
         clear_enemy_half(session_.board_);
@@ -50,6 +52,8 @@ class LanMultiplayerMode {
         combat_result_ = CombatResult::Ongoing;
         player_won_game_ = false;
         ticks_elapsed_ = 0;
+        remote_hp_before_ = 100;
+        remote_hp_after_ = 100;
     }
 
     friend ModeKind tag_invoke(__tag::mode_kind_t,
@@ -195,7 +199,8 @@ class LanMultiplayerMode {
         mode.prep_board_copy_ = clone_board(mode.session_.board_);
         mode.local_ready_board_ = player_ready_board(mode.session_.board_);
         mode.local_ready_ = true;
-        mode.send_board("READY", mode.local_ready_board_);
+        mode.send_board("READY " + std::to_string(mode.session_.player_.hp),
+                        mode.local_ready_board_);
 
         if (mode.kind_ == ModeKind::LanHost && mode.remote_ready_) {
             ModeUpdate begin = mode.begin_host_combat();
@@ -234,8 +239,9 @@ class LanMultiplayerMode {
         }
 
         mode.result_announced_ = true;
+        ModeUpdate update = mode.settle_relative_result();
         mode.send_result();
-        return mode.settle_relative_result();
+        return update;
     }
 
     friend ModeUpdate tag_invoke(__tag::acknowledge_result_t,
@@ -254,8 +260,9 @@ class LanMultiplayerMode {
         mode.local_ready_ = false;
         mode.remote_ready_ = false;
         mode.combat_result_ = CombatResult::Ongoing;
-        update.status = mode.connected_ ? "Prepare your board for another duel."
-                                        : "Multiplayer connection closed.";
+        if (!mode.connected_) {
+            update.status = "Multiplayer connection closed.";
+        }
         return update;
     }
 
@@ -294,10 +301,11 @@ class LanMultiplayerMode {
         std::string payload((std::istreambuf_iterator<char>(in)),
                             std::istreambuf_iterator<char>());
 
-        if (header == "READY") {
+        if (header.starts_with("READY")) {
             if (kind_ != ModeKind::LanHost) {
                 return {};
             }
+            remote_hp_before_ = parse_ready_hp(header);
             if (auto board = deserialize_board_from_string(payload)) {
                 remote_ready_board_ = *board;
                 remote_ready_ = true;
@@ -330,8 +338,16 @@ class LanMultiplayerMode {
             if (kind_ != ModeKind::LanClient) {
                 return {};
             }
-            CombatResult host_result = combat_result_from_string(
-                header.substr(std::string("RESULT ").size()));
+            std::string command;
+            std::string result_text;
+            int host_hp = 0;
+            int client_hp = 0;
+            std::istringstream header_in(header);
+            if (!(header_in >> command >> result_text >> host_hp >>
+                  client_hp)) {
+                return {};
+            }
+            CombatResult host_result = combat_result_from_string(result_text);
             combat_result_ = invert_result(host_result);
             if (auto board = deserialize_board_from_string(payload)) {
                 Board client_view = board_to_client_view(*board);
@@ -342,7 +358,7 @@ class LanMultiplayerMode {
             result_announced_ = true;
             local_ready_ = false;
             remote_ready_ = false;
-            return settle_relative_result();
+            return settle_reported_result(client_hp, host_hp);
         }
 
         return {};
@@ -364,27 +380,61 @@ class LanMultiplayerMode {
     }
 
     ModeUpdate settle_relative_result() {
-        if (combat_result_ == CombatResult::PlayerWin) {
-            int reward_gold = 2 + session_.player_.level * 2;
-            session_.player_.gold += reward_gold;
-            return {"VICTORY! Gained " + std::to_string(reward_gold) +
-                        " Gold.",
-                    3.0f, false, false, false, false};
+        CombatScoreUpdate score = settle_combat_score(
+            session_, combat_board_, combat_result_, false,
+            unit::Owner::EnemyCtrl, multiplayer_draw_gold());
+        CombatResult opponent_result = invert_result(combat_result_);
+        GameSession opponent_session;
+        opponent_session.player_.hp = remote_hp_before_;
+        settle_combat_score(opponent_session, combat_board_, opponent_result,
+                            false, unit::Owner::PlayerCtrl,
+                            multiplayer_draw_gold());
+        remote_hp_after_ = opponent_session.player_.hp;
+
+        ModeUpdate update{score.status, 3.0f, false, false, false, false};
+        return settle_multiplayer_game_end(update, remote_hp_after_ <= 0);
+    }
+
+    ModeUpdate settle_reported_result(int local_hp_after, int remote_hp_after) {
+        local_hp_after = std::max(0, local_hp_after);
+        remote_hp_after_ = std::max(0, remote_hp_after);
+        int damage = std::max(0, session_.player_.hp - local_hp_after);
+        CombatScoreUpdate score = settle_combat_score_with_damage(
+            session_, combat_result_, false, damage, multiplayer_draw_gold());
+        session_.player_.hp = local_hp_after;
+        if (session_.player_.hp <= 0 && !score.player_defeated) {
+            if (!score.status.ends_with(" GAME OVER!")) {
+                score.status += " GAME OVER!";
+            }
+            score.player_defeated = true;
         }
 
-        int survivors = count_living_units(combat_board_, unit::Owner::EnemyCtrl);
-        int damage = 10 + 2 * survivors;
-        session_.player_.hp = std::max(0, session_.player_.hp - damage);
-        std::string status =
-            (combat_result_ == CombatResult::Draw ? "DRAW! Took "
-                                                   : "DEFEAT! Took ") +
-            std::to_string(damage) + " damage.";
-        if (session_.player_.hp <= 0) {
-            status += " GAME OVER!";
-            player_won_game_ = false;
-            return {status, 3.0f, false, false, true, false};
+        ModeUpdate update{score.status, 3.0f, false, false, false, false};
+        return settle_multiplayer_game_end(update, remote_hp_after_ <= 0);
+    }
+
+    ModeUpdate settle_multiplayer_game_end(ModeUpdate update,
+                                          bool opponent_defeated) {
+        bool local_defeated = session_.player_.hp <= 0;
+        if (!local_defeated && !opponent_defeated) {
+            return update;
         }
-        return {status, 3.0f, false, false, false, false};
+        player_won_game_ = !local_defeated && opponent_defeated;
+        update.enter_settlement = true;
+        update.player_won_game = player_won_game_;
+        return update;
+    }
+
+    static constexpr int multiplayer_draw_gold() {
+        return 2;
+    }
+
+    static int parse_ready_hp(const std::string &header) {
+        std::istringstream header_in(header);
+        std::string command;
+        int hp = 100;
+        header_in >> command >> hp;
+        return hp;
     }
 
     void send_board(const std::string &header, const Board &board) {
@@ -398,7 +448,9 @@ class LanMultiplayerMode {
     }
 
     void send_result() {
-        send_board("RESULT " + combat_result_to_string(combat_result_),
+        send_board("RESULT " + combat_result_to_string(combat_result_) + " " +
+                       std::to_string(session_.player_.hp) + " " +
+                       std::to_string(remote_hp_after_),
                    combat_board_);
     }
 };

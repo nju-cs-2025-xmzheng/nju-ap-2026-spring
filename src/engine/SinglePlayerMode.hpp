@@ -1,7 +1,6 @@
 #pragma once
 
 #include "engine/GameModeCommon.hpp"
-#include <cstdlib>
 
 namespace Synera::engine {
 
@@ -169,65 +168,19 @@ class SinglePlayerMode {
 
   private:
     static ModeUpdate settle_combat(SinglePlayerMode &mode) {
-        if (mode.combat_result_ == CombatResult::PlayerWin) {
-            int reward_gold = 2 + mode.session_.player_.level * 2;
-            mode.session_.player_.gold += reward_gold;
-            std::string status =
-                "VICTORY! Gained " + std::to_string(reward_gold) + " Gold.";
+        CombatScoreUpdate score = settle_combat_score(
+            mode.session_, mode.combat_board_, mode.combat_result_, true);
 
-            if ((std::rand() % 100) < 30) {
-                unit::Element random_elem =
-                    static_cast<unit::Element>(std::rand() % 6);
-                unit::Equipment item;
-                switch (random_elem) {
-                case unit::Element::Pyro:
-                    item = unit::PyroDrop{};
-                    break;
-                case unit::Element::Hydro:
-                    item = unit::HydroDrop{};
-                    break;
-                case unit::Element::Anemo:
-                    item = unit::AnemoDrop{};
-                    break;
-                case unit::Element::Geo:
-                    item = unit::GeoDrop{};
-                    break;
-                case unit::Element::Electro:
-                    item = unit::ElectroDrop{};
-                    break;
-                case unit::Element::Cryo:
-                    item = unit::CryoDrop{};
-                    break;
-                }
-                mode.session_.equip_pool_.push_back(item);
-                status += " Equipment dropped!";
-            }
-            return {status, 3.0f, false, false, false, false};
-        }
-
-        int survivors =
-            count_living_units(mode.combat_board_, unit::Owner::EnemyCtrl);
-        int damage = 10 + 2 * survivors;
-        mode.session_.player_.hp =
-            std::max(0, mode.session_.player_.hp - damage);
-        std::string status =
-            (mode.combat_result_ == CombatResult::Draw ? "DRAW! Took "
-                                                       : "DEFEAT! Took ") +
-            std::to_string(damage) + " damage.";
-        if (mode.session_.player_.hp <= 0) {
-            status += " GAME OVER!";
-        }
-
-        if (mode.session_.player_.hp <= 0) {
+        if (score.player_defeated) {
             mode.player_won_game_ = false;
-            return {status, 3.0f, false, false, true, false};
+            return {score.status, 3.0f, false, false, true, false};
         }
         if (mode.session_.round_ == 20) {
             mode.player_won_game_ = true;
             mode.is_combat_ = false;
-            return {status, 3.0f, false, false, true, true};
+            return {score.status, 3.0f, false, false, true, true};
         }
-        return {status, 3.0f, false, false, false, false};
+        return {score.status, 3.0f, false, false, false, false};
     }
 };
 

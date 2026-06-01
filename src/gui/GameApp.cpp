@@ -355,6 +355,14 @@ void GameApp::Update() {
     } else if (state_ == GameState::MainMenu) {
         target_cam_pos_ = {0.0f, 3.0f, 30.0f};
         target_cam_target_ = {0.0f, 0.0f, 0.0f};
+    } else if (state_ == GameState::Settlement) {
+        if (player_won_game_) {
+            target_cam_pos_ = {0.0f, 50.0f, 30.0f}; // same as StartMenu
+            target_cam_target_ = {0.0f, 0.0f, 0.0f};
+        } else {
+            target_cam_pos_ = {0.0f, 15.0f, 3.0f}; // same as Combat
+            target_cam_target_ = {0.0f, 0.0f, 1.4f};
+        }
     } else { // GameState::Gameplay
         if (is_combat_) {
             target_cam_pos_ = {0.0f, 15.0f, 3.0f};
@@ -382,6 +390,8 @@ void GameApp::Update() {
         UpdateStartMenu();
     } else if (state_ == GameState::MainMenu) {
         UpdateMainMenu();
+    } else if (state_ == GameState::Settlement) {
+        UpdateSettlement();
     } else {
         if (!is_combat_) {
             HandleInputs();
@@ -402,7 +412,8 @@ void GameApp::Update() {
     }
 
     // 4. Combat loop update
-    if (is_combat_ && !combat_result_announced_) {
+    if (state_ == GameState::Gameplay && is_combat_ &&
+        !combat_result_announced_) {
         combat_tick_timer += GetFrameTime();
         while (combat_tick_timer >= combat_tick_interval) {
             combat_tick_timer -= combat_tick_interval;
@@ -895,6 +906,82 @@ void GameApp::DrawMainMenu() {
     }
 }
 
+void GameApp::UpdateSettlement() {
+    if (GetKeyPressed() != 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        state_ = GameState::MainMenu;
+        game_in_progress_ = false;
+        is_combat_ = false;
+        session_ = engine::GameSession();
+        slimes_.clear();
+        projectiles_.clear();
+        menu_transition_cooldown_ = 0.25f;
+    }
+}
+
+void GameApp::DrawSettlement() {
+    // 1. Dim the background/viewpoint
+    DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 0.65f));
+
+    // 2. Draw card/box background
+    int box_w = 560;
+    int box_h = 320;
+    int box_x = 640 - box_w / 2;
+    int box_y = 360 - box_h / 2;
+
+    // Sleek glassmorphism look
+    DrawRectangle(box_x, box_y, box_w, box_h, Color{20, 20, 25, 230});
+    Color border_color = player_won_game_ ? GOLD : RED;
+    DrawRectangleLinesEx(
+        {(float)box_x, (float)box_y, (float)box_w, (float)box_h}, 2.0f,
+        border_color);
+
+    // Glowing outline
+    DrawRectangleLinesEx({(float)box_x - 1, (float)box_y - 1, (float)box_w + 2,
+                          (float)box_h + 2},
+                         1.0f, Fade(border_color, 0.5f));
+
+    // Title
+    const char *title = player_won_game_ ? "VICTORY!" : "DEFEAT!";
+    int titleFontSize = 48;
+    int titleWidth = MeasureGameText(title, titleFontSize, true);
+    int titleX = 640 - titleWidth / 2;
+    int titleY = box_y + 40;
+
+    // Text shadow
+    DrawGameText(title, titleX + 2, titleY + 2, titleFontSize, BLACK, true);
+    DrawGameText(title, titleX, titleY, titleFontSize, border_color, true);
+
+    // Description text
+    std::string desc1;
+    std::string desc2;
+    if (player_won_game_) {
+        desc1 = "Congratulations! You have successfully survived";
+        desc2 = "all 20 rounds of Slime Tactics!";
+    } else {
+        desc1 = "Your forces fell. You reached Round " +
+                std::to_string(session_.round_) + ".";
+        desc2 = "Better luck next time!";
+    }
+
+    int descFontSize = 18;
+    int desc1W = MeasureGameText(desc1.c_str(), descFontSize, false);
+    int desc2W = MeasureGameText(desc2.c_str(), descFontSize, false);
+
+    DrawGameText(desc1.c_str(), 640 - desc1W / 2, box_y + 130, descFontSize,
+                 LIGHTGRAY, false);
+    DrawGameText(desc2.c_str(), 640 - desc2W / 2, box_y + 165, descFontSize,
+                 LIGHTGRAY, false);
+
+    // Click/key Prompt
+    float pulse = sin(GetTime() * 3.5f) * 0.5f + 0.5f;
+    Color promptColor = Fade(GRAY, 0.4f + pulse * 0.6f);
+    const char *prompt = "PRESS ANY KEY OR CLICK TO RETURN TO MAIN MENU";
+    int promptFontSize = 14;
+    int promptW = MeasureGameText(prompt, promptFontSize, true);
+    DrawGameText(prompt, 640 - promptW / 2, box_y + 245, promptFontSize,
+                 promptColor, true);
+}
+
 void GameApp::HandleInputs() {
     bool over_ui = IsMouseOverUI();
 
@@ -1186,6 +1273,19 @@ void GameApp::EndCombatPhase() {
             status_msg_ += " GAME OVER!";
         }
     }
+
+    // Check game victory/failure conditions
+    if (session_.player_.hp <= 0) {
+        state_ = GameState::Settlement;
+        player_won_game_ = false;
+        combat_result_announced_ = false;
+    } else if (session_.round_ == 20) {
+        state_ = GameState::Settlement;
+        player_won_game_ = true;
+        combat_result_announced_ = false;
+        is_combat_ =
+            false; // Reset combat flag for Victory (StartMenu background)
+    }
 }
 
 void GameApp::Draw() {
@@ -1202,6 +1302,8 @@ void GameApp::Draw() {
         DrawStartMenu();
     } else if (state_ == GameState::MainMenu) {
         DrawMainMenu();
+    } else if (state_ == GameState::Settlement) {
+        DrawSettlement();
     } else {
         DrawGame2D();
     }

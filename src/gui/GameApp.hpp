@@ -40,11 +40,7 @@ struct VisualProjectile {
     float max_radius = 1.5f;
 };
 
-enum class GameState {
-    StartMenu,
-    MainMenu,
-    Gameplay
-};
+enum class GameState { StartMenu, MainMenu, Gameplay, Settlement };
 
 class GameApp {
   public:
@@ -78,6 +74,8 @@ class GameApp {
     void DrawStartMenu();
     void UpdateMainMenu();
     void DrawMainMenu();
+    void UpdateSettlement();
+    void DrawSettlement();
 
     // Draw helpers
     void DrawGame3D();
@@ -108,6 +106,7 @@ class GameApp {
     int ticks_elapsed_ = 0;
     bool combat_result_announced_ = false;
     bool player_won_combat_ = false;
+    bool player_won_game_ = false;
 
     engine::Coord selected_coord_;
     bool has_selection_ = false;

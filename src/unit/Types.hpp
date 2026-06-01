@@ -50,3 +50,12 @@ using Unit = std::variant<PyroSlime, HydroSlime, AnemoSlime, GeoSlime,
                           ElectroSlime, CryoSlime>;
 
 } // namespace Synera::unit
+
+#include "common/Serialization.hpp"
+
+namespace Synera::serialization {
+void tag_invoke(serialize_t, std::ostream &, const unit::Equipment &);
+void tag_invoke(deserialize_t, std::istream &, unit::Equipment &);
+void tag_invoke(serialize_t, std::ostream &, const unit::Unit &);
+void tag_invoke(deserialize_t, std::istream &, unit::Unit &);
+} // namespace Synera::serialization

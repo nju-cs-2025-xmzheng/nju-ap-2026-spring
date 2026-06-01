@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/Serialization.hpp"
 #include "common/__cpo.hpp"
 #include "engine/Coord.hpp"
 #include "unit/Types.hpp"
@@ -132,7 +133,7 @@ constexpr double get_star_scale(int level) noexcept {
 
 struct PyroSlime {
     UnitStats stats_;
-    constexpr PyroSlime(Owner owner, int level = 1) noexcept
+    constexpr PyroSlime(Owner owner = Owner::PlayerCtrl, int level = 1) noexcept
         : stats_{owner,
                  State::Idle,
                  int(350 * get_star_scale(level)),
@@ -166,7 +167,8 @@ struct PyroSlime {
 
 struct HydroSlime {
     UnitStats stats_;
-    constexpr HydroSlime(Owner owner, int level = 1) noexcept
+    constexpr HydroSlime(Owner owner = Owner::PlayerCtrl,
+                         int level = 1) noexcept
         : stats_{owner,
                  State::Idle,
                  int(400 * get_star_scale(level)),
@@ -202,7 +204,8 @@ struct HydroSlime {
 
 struct AnemoSlime {
     UnitStats stats_;
-    constexpr AnemoSlime(Owner owner, int level = 1) noexcept
+    constexpr AnemoSlime(Owner owner = Owner::PlayerCtrl,
+                         int level = 1) noexcept
         : stats_{owner,
                  State::Idle,
                  int(300 * get_star_scale(level)),
@@ -236,7 +239,7 @@ struct AnemoSlime {
 
 struct GeoSlime {
     UnitStats stats_;
-    constexpr GeoSlime(Owner owner, int level = 1) noexcept
+    constexpr GeoSlime(Owner owner = Owner::PlayerCtrl, int level = 1) noexcept
         : stats_{owner,
                  State::Idle,
                  int(450 * get_star_scale(level)),
@@ -270,7 +273,8 @@ struct GeoSlime {
 
 struct ElectroSlime {
     UnitStats stats_;
-    constexpr ElectroSlime(Owner owner, int level = 1) noexcept
+    constexpr ElectroSlime(Owner owner = Owner::PlayerCtrl,
+                           int level = 1) noexcept
         : stats_{owner,
                  State::Idle,
                  int(320 * get_star_scale(level)),
@@ -304,7 +308,7 @@ struct ElectroSlime {
 
 struct CryoSlime {
     UnitStats stats_;
-    constexpr CryoSlime(Owner owner, int level = 1) noexcept
+    constexpr CryoSlime(Owner owner = Owner::PlayerCtrl, int level = 1) noexcept
         : stats_{owner,
                  State::Idle,
                  int(380 * get_star_scale(level)),
@@ -368,4 +372,147 @@ void tag_invoke(__tag::normal_attack_t, Unit &v, B &&board, C &&target) {
                v);
 }
 
+inline std::string element_to_string(Element elem) {
+    switch (elem) {
+    case Element::Pyro:
+        return "Pyro";
+    case Element::Hydro:
+        return "Hydro";
+    case Element::Anemo:
+        return "Anemo";
+    case Element::Geo:
+        return "Geo";
+    case Element::Electro:
+        return "Electro";
+    case Element::Cryo:
+        return "Cryo";
+    }
+    return "Pyro";
+}
+
+inline Element string_to_element(const std::string &str) {
+    if (str == "Pyro")
+        return Element::Pyro;
+    if (str == "Hydro")
+        return Element::Hydro;
+    if (str == "Anemo")
+        return Element::Anemo;
+    if (str == "Geo")
+        return Element::Geo;
+    if (str == "Electro")
+        return Element::Electro;
+    if (str == "Cryo")
+        return Element::Cryo;
+    return Element::Pyro;
+}
+
+inline std::string owner_to_string(Owner owner) {
+    return owner == Owner::PlayerCtrl ? "Player" : "Enemy";
+}
+
+inline Owner string_to_owner(const std::string &str) {
+    return str == "Player" ? Owner::PlayerCtrl : Owner::EnemyCtrl;
+}
+
+inline std::string state_to_string(State state) {
+    switch (state) {
+    case State::Idle:
+        return "Idle";
+    case State::Moving:
+        return "Moving";
+    case State::Attacking:
+        return "Attacking";
+    case State::Casting:
+        return "Casting";
+    case State::Dead:
+        return "Dead";
+    }
+    return "Idle";
+}
+
+inline State string_to_state(const std::string &str) {
+    if (str == "Idle")
+        return State::Idle;
+    if (str == "Moving")
+        return State::Moving;
+    if (str == "Attacking")
+        return State::Attacking;
+    if (str == "Casting")
+        return State::Casting;
+    if (str == "Dead")
+        return State::Dead;
+    return State::Idle;
+}
+
+inline Unit make_slime_by_element(Element elem, Owner owner, int level) {
+    switch (elem) {
+    case Element::Pyro:
+        return PyroSlime(owner, level);
+    case Element::Hydro:
+        return HydroSlime(owner, level);
+    case Element::Anemo:
+        return AnemoSlime(owner, level);
+    case Element::Geo:
+        return GeoSlime(owner, level);
+    case Element::Electro:
+        return ElectroSlime(owner, level);
+    case Element::Cryo:
+        return CryoSlime(owner, level);
+    }
+    return PyroSlime(owner, level);
+}
+
 } // namespace Synera::unit
+
+namespace Synera::serialization {
+
+inline void tag_invoke(serialize_t, std::ostream &out, const unit::Unit &u) {
+    auto &s = unit::stats(u);
+    out << unit::element_to_string(unit::element(u)) << " "
+        << unit::owner_to_string(s.owner) << " "
+        << unit::state_to_string(s.state) << " " << s.hp << " " << s.max_hp
+        << " " << s.atk << " " << s.range << " " << s.max_mana << " " << s.mana
+        << " " << s.level << " " << s.shield << " ";
+    serialize(out, s.equipped);
+    out << " " << s.attack_cooldown << " " << s.move_cooldown << " "
+        << s.stun_ticks << " " << s.attack_interval << " " << s.move_interval;
+}
+
+inline void tag_invoke(deserialize_t, std::istream &in, unit::Unit &u) {
+    std::string elem_str, owner_str, state_str;
+    int hp, max_hp, atk, range, max_mana, mana, lvl, shield;
+    int attack_cooldown, move_cooldown, stun_ticks, attack_interval,
+        move_interval;
+
+    if (in >> elem_str >> owner_str >> state_str >> hp >> max_hp >> atk >>
+        range >> max_mana >> mana >> lvl >> shield) {
+        unit::Element elem = unit::string_to_element(elem_str);
+        unit::Owner owner = unit::string_to_owner(owner_str);
+        unit::State state = unit::string_to_state(state_str);
+
+        unit::Equipment eq;
+        deserialize(in, eq);
+
+        if (in >> attack_cooldown >> move_cooldown >> stun_ticks >>
+            attack_interval >> move_interval) {
+            u = unit::make_slime_by_element(elem, owner, lvl);
+            auto &s = unit::stats(u);
+            s.state = state;
+            s.hp = hp;
+            s.max_hp = max_hp;
+            s.atk = atk;
+            s.range = range;
+            s.max_mana = max_mana;
+            s.mana = mana;
+            s.shield = shield;
+            s.equipped = eq;
+            s.attack_cooldown = attack_cooldown;
+            s.move_cooldown = move_cooldown;
+            s.stun_ticks = stun_ticks;
+            s.attack_interval = attack_interval;
+            s.move_interval = move_interval;
+        }
+    }
+}
+
+} // namespace Synera::serialization

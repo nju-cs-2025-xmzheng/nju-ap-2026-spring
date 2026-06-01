@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/Config.hpp"
+#include "common/Serialization.hpp"
 #include "engine/Board.hpp"
 #include "unit/Unit.hpp"
 #include <array>
@@ -245,7 +246,9 @@ class GameSession {
         for (int i = 0; i < count; ++i) {
             unit::Element elem = static_cast<unit::Element>(i % 6);
             HexCoord pos{1, 1 + i};
-            set_unit(board_, pos, std::make_shared<unit::Unit>(make_slime(elem, star_level, unit::Owner::EnemyCtrl)));
+            set_unit(board_, pos,
+                     std::make_shared<unit::Unit>(
+                         make_slime(elem, star_level, unit::Owner::EnemyCtrl)));
         }
     }
 
@@ -281,3 +284,164 @@ class GameSession {
 };
 
 } // namespace Synera::engine
+
+namespace Synera::serialization {
+
+inline void tag_invoke(serialize_t, std::ostream &out,
+                       const engine::Player &player) {
+    out << "hp " << player.hp << "\n";
+    out << "gold " << player.gold << "\n";
+    out << "level " << player.level << "\n";
+}
+
+inline void tag_invoke(deserialize_t, std::istream &in,
+                       engine::Player &player) {
+    std::string line;
+    while (true) {
+        auto pos = in.tellg();
+        if (!std::getline(in, line)) {
+            break;
+        }
+        if (line.empty()) {
+            continue;
+        }
+        if (line == "[player]") {
+            continue;
+        }
+        if (line.front() == '[') {
+            in.seekg(pos);
+            break;
+        }
+        std::istringstream iss(line);
+        std::string key;
+        int val;
+        if (iss >> key >> val) {
+            if (key == "hp") {
+                player.hp = val;
+            } else if (key == "gold") {
+                player.gold = val;
+            } else if (key == "level") {
+                player.level = val;
+            } else {
+                in.seekg(pos);
+                break;
+            }
+        }
+    }
+}
+
+inline void tag_invoke(serialize_t, std::ostream &out,
+                       const engine::GameSession &session) {
+    // 1. Save Player
+    out << "[player]\n";
+    serialize(out, session.player_);
+    out << "round " << session.round_ << "\n\n";
+
+    // 2. Save Shop
+    out << "[shop]\n";
+    for (int i = 0; i < 5; ++i) {
+        if (session.shop_[i].has_value()) {
+            auto &[u, cost] = *session.shop_[i];
+            out << "slot " << i << " "
+                << unit::element_to_string(unit::element(u)) << " "
+                << unit::stats(u).level << " " << cost << "\n";
+        } else {
+            out << "slot " << i << " empty\n";
+        }
+    }
+    out << "\n";
+
+    // 3. Save Equip Pool
+    out << "[equip_pool]\n";
+    out << "count " << session.equip_pool_.size() << "\n";
+    for (const auto &eq : session.equip_pool_) {
+        out << "item ";
+        serialize(out, eq);
+        out << "\n";
+    }
+    out << "\n";
+
+    // 4. Save Board and Bench
+    serialize(out, session.board_);
+}
+
+inline void tag_invoke(deserialize_t, std::istream &in,
+                       engine::GameSession &session) {
+    // Reset session state
+    session.player_ = engine::Player{};
+    engine::init_board(session.board_);
+    session.shop_.fill(std::nullopt);
+    session.equip_pool_.clear();
+
+    std::string line;
+    std::string section = "";
+
+    while (true) {
+        auto pos = in.tellg();
+        if (!std::getline(in, line)) {
+            break;
+        }
+        if (line.empty())
+            continue;
+
+        if (line == "[player]") {
+            deserialize(in, session.player_);
+            section = "player";
+            continue;
+        } else if (line == "[shop]") {
+            section = "shop";
+            continue;
+        } else if (line == "[equip_pool]") {
+            section = "equip_pool";
+            continue;
+        } else if (line == "[board]" || line == "[bench]") {
+            in.seekg(pos);
+            deserialize(in, session.board_);
+            continue;
+        }
+
+        std::istringstream iss(line);
+        if (section == "player") {
+            std::string key;
+            int val;
+            if (iss >> key >> val) {
+                if (key == "round") {
+                    session.round_ = val;
+                }
+            }
+        } else if (section == "shop") {
+            std::string key;
+            int slot;
+            iss >> key >> slot;
+            if (key == "slot") {
+                std::string status_or_element;
+                if (iss >> status_or_element) {
+                    if (status_or_element == "empty") {
+                        session.shop_[slot] = std::nullopt;
+                    } else {
+                        int lvl, cost;
+                        if (iss >> lvl >> cost) {
+                            unit::Element elem =
+                                unit::string_to_element(status_or_element);
+                            session.shop_[slot] = std::make_pair(
+                                unit::make_slime_by_element(
+                                    elem, unit::Owner::PlayerCtrl, lvl),
+                                cost);
+                        }
+                    }
+                }
+            }
+        } else if (section == "equip_pool") {
+            std::string key;
+            if (iss >> key) {
+                if (key == "item") {
+                    unit::Equipment eq;
+                    deserialize(iss, eq);
+                    session.equip_pool_.push_back(eq);
+                }
+            }
+        }
+    }
+}
+
+} // namespace Synera::serialization

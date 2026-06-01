@@ -1,5 +1,5 @@
+#include "common/Serialization.hpp"
 #include "engine/GameSession.hpp"
-#include "engine/Serialization.hpp"
 #include "unit/Unit.hpp"
 #include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <cassert>

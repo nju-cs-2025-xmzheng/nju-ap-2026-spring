@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/Serialization.hpp"
 #include "unit/Types.hpp"
 #include "unit/Unit.hpp"
 #include <string>
@@ -85,4 +86,52 @@ template <typename E> inline void tag_invoke(__tag::equip_t, Unit &v, E &&eq) {
     std::visit([&eq](auto &u) { equip(u, std::forward<E>(eq)); }, v);
 }
 
+inline std::string equipment_to_string(const Equipment &eq) {
+    if (std::holds_alternative<PyroDrop>(eq))
+        return "PyroDrop";
+    if (std::holds_alternative<HydroDrop>(eq))
+        return "HydroDrop";
+    if (std::holds_alternative<AnemoDrop>(eq))
+        return "AnemoDrop";
+    if (std::holds_alternative<GeoDrop>(eq))
+        return "GeoDrop";
+    if (std::holds_alternative<ElectroDrop>(eq))
+        return "ElectroDrop";
+    if (std::holds_alternative<CryoDrop>(eq))
+        return "CryoDrop";
+    return "None";
+}
+
+inline Equipment string_to_equipment(const std::string &str) {
+    if (str == "PyroDrop")
+        return PyroDrop{};
+    if (str == "HydroDrop")
+        return HydroDrop{};
+    if (str == "AnemoDrop")
+        return AnemoDrop{};
+    if (str == "GeoDrop")
+        return GeoDrop{};
+    if (str == "ElectroDrop")
+        return ElectroDrop{};
+    if (str == "CryoDrop")
+        return CryoDrop{};
+    return std::monostate{};
+}
+
 } // namespace Synera::unit
+
+namespace Synera::serialization {
+
+inline void tag_invoke(serialize_t, std::ostream &os,
+                       const unit::Equipment &eq) {
+    os << unit::equipment_to_string(eq);
+}
+
+inline void tag_invoke(deserialize_t, std::istream &is, unit::Equipment &eq) {
+    std::string str;
+    if (is >> str) {
+        eq = unit::string_to_equipment(str);
+    }
+}
+
+} // namespace Synera::serialization

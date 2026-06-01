@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/Config.hpp"
+#include "common/Serialization.hpp"
 #include "common/__cpo.hpp"
 #include "engine/Coord.hpp"
 #include "unit/Unit.hpp"
@@ -421,3 +422,83 @@ class Board {
 };
 
 } // namespace Synera::engine
+
+namespace Synera::serialization {
+
+inline void tag_invoke(serialize_t, std::ostream &out,
+                       const engine::Board &board) {
+    // Save Board Grid (8x8)
+    out << "[board]\n";
+    for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
+        for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+            engine::HexCoord coord{r, c};
+            if (auto u_ptr = engine::get_unit(board, coord)) {
+                out << "grid " << r << " " << c << " ";
+                serialize(out, *u_ptr);
+                out << "\n";
+            }
+        }
+    }
+    out << "\n";
+
+    // Save Bench (8 slots)
+    out << "[bench]\n";
+    for (int i = 0; i < config::engine::BENCH_SIZE; ++i) {
+        engine::LinearCoord coord{i};
+        if (auto u_ptr = engine::get_unit(board, coord)) {
+            out << "bench " << i << " ";
+            serialize(out, *u_ptr);
+            out << "\n";
+        }
+    }
+}
+
+inline void tag_invoke(deserialize_t, std::istream &in, engine::Board &board) {
+    engine::init_board(board);
+
+    std::string line;
+    std::string section = "board";
+
+    while (true) {
+        auto pos = in.tellg();
+        if (!std::getline(in, line)) {
+            break;
+        }
+        if (line.empty()) {
+            continue;
+        }
+        if (line == "[board]") {
+            section = "board";
+            continue;
+        } else if (line == "[bench]") {
+            section = "bench";
+            continue;
+        } else if (line.front() == '[') {
+            in.seekg(pos);
+            break;
+        }
+
+        std::istringstream iss(line);
+        if (section == "board") {
+            std::string key;
+            int r, c;
+            if (iss >> key >> r >> c && key == "grid") {
+                unit::Unit u_val;
+                deserialize(iss, u_val);
+                engine::set_unit(board, engine::HexCoord{r, c},
+                                 std::make_shared<unit::Unit>(u_val));
+            }
+        } else if (section == "bench") {
+            std::string key;
+            int idx;
+            if (iss >> key >> idx && key == "bench") {
+                unit::Unit u_val;
+                deserialize(iss, u_val);
+                engine::set_unit(board, engine::LinearCoord{idx},
+                                 std::make_shared<unit::Unit>(u_val));
+            }
+        }
+    }
+}
+
+} // namespace Synera::serialization

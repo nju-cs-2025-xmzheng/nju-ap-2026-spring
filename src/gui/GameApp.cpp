@@ -1,5 +1,5 @@
 #include "gui/GameApp.hpp"
-#include "engine/Serialization.hpp"
+#include "common/Serialization.hpp"
 #include "raymath.h"
 #include "unit/Synergy.hpp"
 #include "unit/UnitImpl.hpp" // IWYU pragma: keep
@@ -719,7 +719,8 @@ void GameApp::DrawMainMenu() {
         DrawGameText(text, x + w / 2 - text_w / 2, y + 13, 18, text_color,
                      true);
 
-        return hover && (menu_transition_cooldown_ <= 0.0f) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+        return hover && (menu_transition_cooldown_ <= 0.0f) &&
+               IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     };
 
     if (is_slot_menu_) {
@@ -761,7 +762,8 @@ void GameApp::DrawMainMenu() {
             DrawGameText(label.c_str(), slot_x + slot_w / 2 - text_w / 2,
                          slot_y + 15, 14, slot_text_color, true);
 
-            if (slot_hover && (menu_transition_cooldown_ <= 0.0f) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (slot_hover && (menu_transition_cooldown_ <= 0.0f) &&
+                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 std::string file = std::string(GetApplicationDirectory()) +
                                    "save_slot_" + std::to_string(i) + ".txt";
                 if (is_saving_mode_) {
@@ -820,7 +822,8 @@ void GameApp::DrawMainMenu() {
                 DrawGameText("DEL", del_x + del_w / 2 - del_text_w / 2,
                              slot_y + 15, 14, WHITE, true);
 
-                if (del_hover && (menu_transition_cooldown_ <= 0.0f) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (del_hover && (menu_transition_cooldown_ <= 0.0f) &&
+                    IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     std::string file = std::string(GetApplicationDirectory()) +
                                        "save_slot_" + std::to_string(i) +
                                        ".txt";

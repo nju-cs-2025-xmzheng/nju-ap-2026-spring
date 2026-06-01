@@ -1556,6 +1556,20 @@ void GameApp::DrawSlime(const Vector3 &pos, float scale, unit::Element elem,
     }
 }
 
+static void DrawStar2D(float cx, float cy, float outerRadius, float innerRadius,
+                       Color color) {
+    Vector2 points[10];
+    for (int i = 0; i < 10; ++i) {
+        float angle = -PI / 2.0f + i * (PI / 5.0f);
+        float r = (i % 2 == 0) ? outerRadius : innerRadius;
+        points[i] = Vector2{cx + r * cosf(angle), cy + r * sinf(angle)};
+    }
+    Vector2 center = {cx, cy};
+    for (int i = 0; i < 10; ++i) {
+        DrawTriangle(center, points[(i + 1) % 10], points[i], color);
+    }
+}
+
 void GameApp::DrawGame2D() {
     // 1. Draw HUD top stats bar
     DrawRectangle(0, 0, 1280, 60, Color{16, 16, 20, 240});
@@ -1683,10 +1697,11 @@ void GameApp::DrawGame2D() {
             DrawRectangle(x, y, w, 8, col);
 
             // Star levels
-            std::string stars = "";
-            for (int s = 0; s < stats.level; ++s)
-                stars += "*";
-            DrawGameText(stars.c_str(), x + 10, y + 18, 20, YELLOW);
+            for (int s = 0; s < stats.level; ++s) {
+                float star_x = x + 18.0f + s * 20.0f;
+                float star_y = y + 28.0f;
+                DrawStar2D(star_x, star_y, 8.0f, 3.5f, YELLOW);
+            }
 
             // Element Name
             std::string name = GetElementName(unit::element(unit)) + " Slime";
@@ -1902,14 +1917,15 @@ void GameApp::DrawGame2D() {
                           BLUE);
 
             // Level stars
-            std::string level_str = "";
-            for (int s = 0; s < stats.level; ++s)
-                level_str += "*";
+            float star_spacing = 11.0f;
+            float total_width = (stats.level - 1) * star_spacing;
+            float x_start = x + bar_w / 2.0f - total_width / 2.0f;
             Color star_col = (stats.level == 4) ? ORANGE : YELLOW;
-            DrawGameText(level_str.c_str(),
-                         x + bar_w / 2 -
-                             MeasureGameText(level_str.c_str(), 12) / 2,
-                         y - 11, 12, star_col);
+            for (int s = 0; s < stats.level; ++s) {
+                float star_x = x_start + s * star_spacing;
+                float star_y = y - 6.0f;
+                DrawStar2D(star_x, star_y, 5.0f, 2.0f, star_col);
+            }
         }
     }
 

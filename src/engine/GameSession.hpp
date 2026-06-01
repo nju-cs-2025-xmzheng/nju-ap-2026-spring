@@ -30,6 +30,7 @@ class GameSession {
     std::vector<unit::Equipment> equip_pool_;
     std::mt19937 rng_;
     int round_ = 1;
+    bool shop_frozen_ = false;
 
     GameSession() {
         std::random_device rd;
@@ -335,7 +336,8 @@ inline void tag_invoke(serialize_t, std::ostream &out,
     // 1. Save Player
     out << "[player]\n";
     serialize(out, session.player_);
-    out << "round " << session.round_ << "\n\n";
+    out << "round " << session.round_ << "\n";
+    out << "shop_frozen " << (session.shop_frozen_ ? 1 : 0) << "\n\n";
 
     // 2. Save Shop
     out << "[shop]\n";
@@ -372,6 +374,7 @@ inline void tag_invoke(deserialize_t, std::istream &in,
     engine::init_board(session.board_);
     session.shop_.fill(std::nullopt);
     session.equip_pool_.clear();
+    session.shop_frozen_ = false;
 
     std::string line;
     std::string section = "";
@@ -407,6 +410,8 @@ inline void tag_invoke(deserialize_t, std::istream &in,
             if (iss >> key >> val) {
                 if (key == "round") {
                     session.round_ = val;
+                } else if (key == "shop_frozen") {
+                    session.shop_frozen_ = (val != 0);
                 }
             }
         } else if (section == "shop") {

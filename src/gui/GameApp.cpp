@@ -129,8 +129,8 @@ GameApp::GameApp() {
     SetTargetFPS(60);
 
     // 2. Initialize Camera
-    camera_.position = {0.0f, 50.0f, 30.0f};
-    camera_.target = {0.0f, 0.0f, 3.0f};
+    camera_.position = {0.0f, 80.0f, -10.0f};
+    camera_.target = {0.0f, 0.0f, -20.0f};
     camera_.up = {0.0f, 1.0f, 0.0f};
     camera_.fovy = 45.0f;
     camera_.projection = CAMERA_PERSPECTIVE;
@@ -959,9 +959,7 @@ void GameApp::HandleInputs() {
     if (is_dragging_ && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         is_dragging_ = false;
         Vector2 mouse_pos = GetMousePosition();
-
-        if (mouse_pos.x >= 1055 && mouse_pos.x <= 1230 && mouse_pos.y >= 660 &&
-            mouse_pos.y <= 705) {
+        if (mouse_pos.y >= 500) {
             auto src_u = get_unit(session_.board_, drag_source_);
             if (src_u) {
                 auto &stats = unit::stats(*src_u);
@@ -980,6 +978,9 @@ void GameApp::HandleInputs() {
                 status_msg_ =
                     "Sold unit for " + std::to_string(price) + " Gold.";
                 status_msg_timer_ = 2.0f;
+                if (has_selection_ && selected_coord_ == drag_source_) {
+                    has_selection_ = false;
+                }
             }
             return;
         }
@@ -1231,11 +1232,17 @@ void GameApp::DrawGame3D() {
                 (r >= 4) ? Color{50, 110, 80, 255}
                          : Color{110, 50, 50, 255}; // Player area vs Enemy area
 
-            // Highlight if hovered
+            // Highlight if hovered or selected
             bool highlight = false;
             if (has_hover_ &&
                 std::holds_alternative<engine::HexCoord>(hovered_coord_)) {
                 auto hex = std::get<engine::HexCoord>(hovered_coord_);
+                if (hex.r == r && hex.c == c)
+                    highlight = true;
+            }
+            if (has_selection_ &&
+                std::holds_alternative<engine::HexCoord>(selected_coord_)) {
+                auto hex = std::get<engine::HexCoord>(selected_coord_);
                 if (hex.r == r && hex.c == c)
                     highlight = true;
             }
@@ -1252,6 +1259,12 @@ void GameApp::DrawGame3D() {
             if (has_hover_ &&
                 std::holds_alternative<engine::LinearCoord>(hovered_coord_)) {
                 auto linear = std::get<engine::LinearCoord>(hovered_coord_);
+                if (linear.x == i)
+                    highlight = true;
+            }
+            if (has_selection_ &&
+                std::holds_alternative<engine::LinearCoord>(selected_coord_)) {
+                auto linear = std::get<engine::LinearCoord>(selected_coord_);
                 if (linear.x == i)
                     highlight = true;
             }
@@ -1615,13 +1628,26 @@ void GameApp::DrawGame2D() {
     std::string round_text = std::to_string(session_.round_);
     DrawGameText(round_text.c_str(), 890, 20, 22, WHITE);
 
-    // Phase Indicator
+    // Phase Indicator / Start Combat Button
     if (is_combat_) {
-        DrawRectangle(980, 15, 120, 30, RED);
-        DrawGameText("COMBAT", 1005, 20, 20, WHITE);
+        DrawRectangle(980, 15, 200, 30, RED);
+        DrawRectangleLines(980, 15, 200, 30, Color{100, 30, 30, 255});
+        int text_w = MeasureGameText("COMBAT", 16, true);
+        DrawGameText("COMBAT", 980 + 200 / 2 - text_w / 2, 22, 16, WHITE, true);
     } else {
-        DrawRectangle(980, 15, 120, 30, GREEN);
-        DrawGameText("PREPARE", 1000, 20, 20, WHITE);
+        bool hover =
+            CheckCollisionPointRec(GetMousePosition(), {980, 15, 200, 30});
+        DrawRectangle(980, 15, 200, 30,
+                      hover ? Color{40, 140, 55, 255}
+                            : Color{30, 110, 45, 255});
+        DrawRectangleLines(980, 15, 200, 30, Color{60, 60, 70, 255});
+        int text_w = MeasureGameText("START COMBAT", 16, true);
+        DrawGameText("START COMBAT", 980 + 200 / 2 - text_w / 2, 22, 16, WHITE,
+                     true);
+
+        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            StartCombatPhase();
+        }
     }
 
     // 2. Draw Status Message banner
@@ -1747,27 +1773,33 @@ void GameApp::DrawGame2D() {
         }
     }
 
-    // Shop actions
-    int action_x = 875;
+    // Shop actions column
+    int action_x = 980;
+    int action_w = 220;
     auto draw_shop_action = [&](const char *text, int y, Color col,
-                                Color hover_col, auto action_func) {
-        int w = 150;
+                                Color hover_col, auto action_func,
+                                bool active = true) {
         int h = 45;
-        bool hover = CheckCollisionPointRec(
-            GetMousePosition(),
-            {(float)action_x, (float)y, (float)w, (float)h});
-        DrawRectangle(action_x, y, w, h, hover ? hover_col : col);
-        DrawRectangleLines(action_x, y, w, h, Color{60, 60, 70, 255});
+        bool hover = active && !is_combat_ &&
+                     CheckCollisionPointRec(GetMousePosition(),
+                                            {(float)action_x, (float)y,
+                                             (float)action_w, (float)h});
+        DrawRectangle(action_x, y, action_w, h,
+                      active && !is_combat_ ? (hover ? hover_col : col)
+                                            : DARKGRAY);
+        DrawRectangleLines(action_x, y, action_w, h, Color{60, 60, 70, 255});
 
         int text_w = MeasureGameText(text, 16);
-        DrawGameText(text, action_x + w / 2 - text_w / 2, y + 16, 16, WHITE);
+        DrawGameText(text, action_x + action_w / 2 - text_w / 2, y + 16, 16,
+                     active && !is_combat_ ? WHITE : GRAY);
 
-        if (!is_combat_ && hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (active && !is_combat_ && hover &&
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             action_func();
         }
     };
 
-    // Refresh Shop
+    // 1. Refresh Shop Button
     draw_shop_action("REFRESH (1G)", 536, Color{140, 60, 30, 255},
                      Color{180, 80, 40, 255}, [&]() {
                          bool ok = session_.refresh_shop(false);
@@ -1777,10 +1809,26 @@ void GameApp::DrawGame2D() {
                          }
                      });
 
-    // Buy XP / Level
+    // 2. Freeze Shop Button
+    std::string freeze_lbl = session_.shop_frozen_ ? "FROZEN" : "FREEZE SHOP";
+    Color freeze_col = session_.shop_frozen_ ? Color{30, 144, 255, 255}
+                                             : Color{20, 100, 130, 255};
+    Color freeze_hover = session_.shop_frozen_ ? Color{50, 190, 240, 255}
+                                               : Color{30, 130, 170, 255};
+    draw_shop_action(freeze_lbl.c_str(), 596, freeze_col, freeze_hover, [&]() {
+        session_.shop_frozen_ = !session_.shop_frozen_;
+        if (session_.shop_frozen_) {
+            status_msg_ = "Shop frozen for the next round!";
+        } else {
+            status_msg_ = "Shop unfrozen.";
+        }
+        status_msg_timer_ = 1.5f;
+    });
+
+    // 3. Buy XP / Level (Upgrade) Button
     int lvl_cost = session_.player_.level * 5 + 5;
     std::string level_btn_lbl = "LEVEL UP (" + std::to_string(lvl_cost) + "G)";
-    draw_shop_action(level_btn_lbl.c_str(), 600, Color{30, 60, 140, 255},
+    draw_shop_action(level_btn_lbl.c_str(), 656, Color{30, 60, 140, 255},
                      Color{40, 80, 180, 255}, [&]() {
                          bool ok = session_.buy_level();
                          if (!ok) {
@@ -1793,44 +1841,51 @@ void GameApp::DrawGame2D() {
                          }
                      });
 
-    // Combat controller buttons on the right side
-    auto draw_combat_btn = [&](const char *text, int x, int y, int w, int h,
-                               Color col, Color hover_col, auto action_func,
-                               bool active) {
-        bool hover = active && CheckCollisionPointRec(
-                                   GetMousePosition(),
-                                   {(float)x, (float)y, (float)w, (float)h});
-        DrawRectangle(x, y, w, h,
-                      active ? (hover ? hover_col : col) : DARKGRAY);
-        DrawRectangleLines(x, y, w, h, Color{60, 60, 70, 255});
-        int text_w = MeasureGameText(text, 16);
-        DrawGameText(text, x + w / 2 - text_w / 2, y + h / 2 - 7, 16,
-                     active ? WHITE : GRAY);
+    // Drag-to-Sell Shop Area Overlay
+    if (!is_combat_ && is_dragging_) {
+        Vector2 mouse_pos = GetMousePosition();
+        bool mouse_in_shop = (mouse_pos.y >= 500);
 
-        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            action_func();
+        // Get sell price of dragged unit
+        auto src_u = get_unit(session_.board_, drag_source_);
+        int price = 0;
+        if (src_u) {
+            auto &stats = unit::stats(*src_u);
+            price =
+                (stats.level == 1)
+                    ? 2
+                    : ((stats.level == 2) ? 5 : ((stats.level == 3) ? 14 : 42));
         }
-    };
 
-    // Start Combat
-    std::string combat_lbl = is_combat_ ? "BATTLE IN PROGRESS" : "START COMBAT";
-    draw_combat_btn(
-        combat_lbl.c_str(), 1055, 536, 175, 45, Color{30, 110, 45, 255},
-        Color{40, 140, 55, 255}, [&]() { StartCombatPhase(); }, !is_combat_);
+        if (mouse_in_shop) {
+            // Draw red highlight overlay over the entire shop panel
+            DrawRectangle(0, 500, 1280, 220, Color{180, 40, 40, 60});
+            DrawRectangleLines(0, 500, 1280, 220, RED);
 
-    // Drag-to-Sell Zone
-    if (!is_combat_) {
-        bool hover_sell =
-            is_dragging_ &&
-            CheckCollisionPointRec(GetMousePosition(), {1055, 660, 175, 45});
-        DrawRectangle(1055, 660, 175, 45,
-                      hover_sell ? Color{180, 40, 40, 255}
-                                 : Color{120, 30, 30, 255});
-        DrawRectangleLines(1055, 660, 175, 45, RED);
-        DrawGameText("DRAG HERE TO SELL",
-                     1055 + 175 / 2 -
-                         MeasureGameText("DRAG HERE TO SELL", 14) / 2,
-                     660 + 16, 14, WHITE);
+            std::string sell_text =
+                "RELEASE TO SELL FOR " + std::to_string(price) + " GOLD";
+            int text_w = MeasureGameText(sell_text.c_str(), 20, true);
+            DrawRectangle(640 - text_w / 2 - 20, 590, text_w + 40, 40,
+                          Color{15, 15, 20, 230});
+            DrawRectangleLines(640 - text_w / 2 - 20, 590, text_w + 40, 40,
+                               RED);
+            DrawGameText(sell_text.c_str(), 640 - text_w / 2, 600, 20, RED,
+                         true);
+        } else {
+            // Draw gold drop-capable indicator border/overlay
+            DrawRectangle(0, 500, 1280, 220, Color{200, 160, 40, 30});
+            DrawRectangleLines(0, 500, 1280, 220, GOLD);
+
+            std::string sell_text =
+                "DRAG HERE TO SELL FOR " + std::to_string(price) + " GOLD";
+            int text_w = MeasureGameText(sell_text.c_str(), 20, true);
+            DrawRectangle(640 - text_w / 2 - 20, 590, text_w + 40, 40,
+                          Color{15, 15, 20, 230});
+            DrawRectangleLines(640 - text_w / 2 - 20, 590, text_w + 40, 40,
+                               GOLD);
+            DrawGameText(sell_text.c_str(), 640 - text_w / 2, 600, 20, GOLD,
+                         true);
+        }
     }
 
     // 5.5 Draw 3D health/mana/shield/star bars on top of 3D slimes in 2D space
@@ -2018,7 +2073,12 @@ void GameApp::DrawGame2D() {
                 // Increment round, spawn new enemies, and reset phase
                 session_.round_++;
                 session_.spawn_enemies();
-                session_.refresh_shop(true);
+                if (!session_.shop_frozen_) {
+                    session_.refresh_shop(true);
+                } else {
+                    session_.shop_frozen_ =
+                        false; // reset shop freeze state for the next round
+                }
 
                 // Gained Gold: base gold + interest (max 5G interest)
                 int base_gold = 2 + session_.player_.level;

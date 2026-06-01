@@ -1,6 +1,7 @@
 #include "gui/GameApp.hpp"
 #include "common/Serialization.hpp"
 #include "raymath.h"
+#include "rlgl.h"
 #include "unit/Synergy.hpp"
 #include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <algorithm>
@@ -1210,8 +1211,10 @@ void GameApp::Draw() {
 void GameApp::DrawGame3D() {
     // Draw Arena Background Scene
     if (arena_model_.meshCount > 0) {
+        rlDisableBackfaceCulling();
         DrawModelEx(arena_model_, {0.3f, -3.2f, -5.0f}, {0.0f, 1.0f, 0.0f},
                     0.0f, {0.6f, 0.6f, 0.6f}, WHITE);
+        rlEnableBackfaceCulling();
     }
 
     engine::Board &active_board = is_combat_ ? combat_board_ : session_.board_;

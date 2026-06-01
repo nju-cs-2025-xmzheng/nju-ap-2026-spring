@@ -1,7 +1,6 @@
 #pragma once
 
-#include "engine/BattleEngine.hpp"
-#include "engine/GameSession.hpp"
+#include "engine/GameModeController.hpp"
 #include "raylib.h"
 #include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <map>
@@ -40,7 +39,7 @@ struct VisualProjectile {
     float max_radius = 1.5f;
 };
 
-enum class GameState { StartMenu, MainMenu, Gameplay, Settlement };
+enum class GameState { StartMenu, MainMenu, MultiplayerMenu, Gameplay, Settlement };
 
 class GameApp {
   public:
@@ -67,13 +66,15 @@ class GameApp {
     void HandleInputs();
     void StartCombatPhase();
     void ProcessCombatTick();
-    void EndCombatPhase();
+    void ApplyModeUpdate(const engine::ModeUpdate &update);
 
     // Menu handlers
     void UpdateStartMenu();
     void DrawStartMenu();
     void UpdateMainMenu();
     void DrawMainMenu();
+    void UpdateMultiplayerMenu();
+    void DrawMultiplayerMenu();
     void UpdateSettlement();
     void DrawSettlement();
 
@@ -89,23 +90,16 @@ class GameApp {
     int MeasureGameText(const char *text, int fontSize, bool bold = false);
 
   private:
-    engine::GameSession session_;
-    engine::BattleEngine battle_engine_;
+    engine::GameModeController mode_;
 
     // Animation maps and lists
     std::map<std::shared_ptr<unit::Unit>, VisualSlime> slimes_;
     std::vector<VisualProjectile> projectiles_;
 
     // Game state tracking
-    bool is_combat_ = false;
-    engine::Board combat_board_;
-    engine::Board prep_board_copy_; // to restore positions after combat
     float combat_tick_timer = 0.0f;
     float combat_tick_interval =
         1.0f / 60.0f; // 60 ticks per second (1 tick = 1 frame)
-    int ticks_elapsed_ = 0;
-    bool combat_result_announced_ = false;
-    bool player_won_combat_ = false;
     bool player_won_game_ = false;
 
     engine::Coord selected_coord_;
@@ -143,6 +137,10 @@ class GameApp {
     bool is_saving_mode_ = false;
     bool exit_flag_ = false;
     float menu_transition_cooldown_ = 0.0f;
+    std::string multiplayer_host_ = "127.0.0.1";
+    std::string multiplayer_port_ = "39090";
+    bool editing_host_ = false;
+    bool editing_port_ = false;
 };
 
 } // namespace Synera::gui

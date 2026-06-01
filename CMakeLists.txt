@@ -1,18 +1,33 @@
 cmake_minimum_required(VERSION 3.21)
 project(Synera LANGUAGES CXX)
 
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(raylib REQUIRED)
+find_package(Boost REQUIRED)
+find_package(Threads REQUIRED)
+
+if(TARGET Boost::headers)
+    set(SYNERA_BOOST_TARGET Boost::headers)
+elseif(TARGET Boost::boost)
+    set(SYNERA_BOOST_TARGET Boost::boost)
+endif()
 
 add_executable(Synera
     src/main.cpp
     src/gui/GameApp.cpp
 )
 
-target_include_directories(Synera PRIVATE src)
-target_link_libraries(Synera PRIVATE raylib)
+target_include_directories(Synera PRIVATE src ${Boost_INCLUDE_DIRS})
+target_link_libraries(Synera PRIVATE raylib Threads::Threads)
+if(DEFINED SYNERA_BOOST_TARGET)
+    target_link_libraries(Synera PRIVATE ${SYNERA_BOOST_TARGET})
+endif()
 
 include(CTest)
 

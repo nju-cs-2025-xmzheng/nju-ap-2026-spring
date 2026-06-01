@@ -22,6 +22,31 @@ int main() {
                              player_electro);
     Synera::engine::set_unit(board, Synera::engine::HexCoord{2, 2}, enemy_pyro);
 
+    Synera::engine::BattleEngine engine;
+
+    {
+        Synera::engine::Board result_board;
+        Synera::engine::init_board(result_board);
+        assert(engine.combat_result(result_board) ==
+               Synera::engine::CombatResult::Draw);
+
+        auto alive_player = std::make_shared<Synera::unit::Unit>(
+            Synera::unit::PyroSlime(Synera::unit::Owner::PlayerCtrl, 1));
+        Synera::engine::set_unit(result_board, Synera::engine::HexCoord{5, 1},
+                                 alive_player);
+        assert(engine.combat_result(result_board) ==
+               Synera::engine::CombatResult::PlayerWin);
+
+        Synera::engine::remove_unit(result_board,
+                                    Synera::engine::HexCoord{5, 1});
+        auto alive_enemy = std::make_shared<Synera::unit::Unit>(
+            Synera::unit::PyroSlime(Synera::unit::Owner::EnemyCtrl, 1));
+        Synera::engine::set_unit(result_board, Synera::engine::HexCoord{2, 1},
+                                 alive_enemy);
+        assert(engine.combat_result(result_board) ==
+               Synera::engine::CombatResult::EnemyWin);
+    }
+
     // 1. Verify Target Selection CPO
     auto target_opt = Synera::engine::select_target(
         board, *player_electro, Synera::engine::HexCoord{5, 2});
@@ -40,7 +65,6 @@ int main() {
               << ")" << std::endl;
 
     // 3. Run Battle Simulation
-    Synera::engine::BattleEngine engine;
     bool player_won = false;
     int ticks = 0;
 

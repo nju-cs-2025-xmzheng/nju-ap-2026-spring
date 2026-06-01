@@ -5,6 +5,7 @@
 #include "unit/Synergy.hpp"
 #include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -62,26 +63,6 @@ static SaveMetadata GetSaveMetadata(int slot) {
         }
     }
     return meta;
-}
-
-Board clone_board(const Board &src) {
-    Board dst;
-    init_board(dst);
-    for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
-        for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
-            HexCoord coord{r, c};
-            if (auto u_ptr = get_unit(src, coord)) {
-                set_unit(dst, coord, std::make_shared<Unit>(*u_ptr));
-            }
-        }
-    }
-    for (int i = 0; i < config::engine::BENCH_SIZE; ++i) {
-        LinearCoord coord{i};
-        if (auto u_ptr = get_unit(src, coord)) {
-            set_unit(dst, coord, std::make_shared<Unit>(*u_ptr));
-        }
-    }
-    return dst;
 }
 
 Color GetElementColor(unit::Element elem) {
@@ -253,6 +234,25 @@ void GameApp::Run() {
     }
 }
 
+void GameApp::ApplyModeUpdate(const engine::ModeUpdate &update) {
+    if (!update.status.empty()) {
+        status_msg_ = update.status;
+        status_msg_timer_ = update.status_timer;
+    }
+    if (update.clear_visuals) {
+        slimes_.clear();
+        projectiles_.clear();
+    }
+    if (update.enter_gameplay) {
+        game_in_progress_ = true;
+        state_ = GameState::Gameplay;
+    }
+    if (update.enter_settlement) {
+        state_ = GameState::Settlement;
+        player_won_game_ = update.player_won_game;
+    }
+}
+
 Vector3 GameApp::GetHexWorldPos(engine::HexCoord coord) {
     float spacing = 1.0f;
     float vertical_spacing = spacing * 0.866f; // spacing * sin(60)
@@ -304,7 +304,7 @@ std::pair<engine::Coord, bool> GameApp::GetCellUnderMouse() {
     bool found = false;
 
     // 1. Search Board grid cells
-    int start_row = is_combat_ ? 0 : 4;
+    int start_row = engine::is_combat(mode_) ? 0 : 4;
     for (int r = start_row; r < config::engine::BOARD_ROWS; ++r) {
         for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
             engine::HexCoord coord{r, c};
@@ -341,18 +341,23 @@ bool GameApp::IsMouseOverUI() {
         return true;
     if (m.x >= 20 && m.x <= 240 && m.y >= 120 && m.y <= 480)
         return true;
-    if (combat_result_announced_)
+    if (engine::result_announced(mode_))
         return true;
     return false;
 }
 
 void GameApp::Update() {
+    ApplyModeUpdate(engine::poll_mode(mode_));
+
     // 1. Smoothly interpolate camera position and target depending on
     // state/phase
     if (state_ == GameState::StartMenu) {
         target_cam_pos_ = {0.0f, 50.0f, 30.0f};
         target_cam_target_ = {0.0f, 0.0f, 0.0f};
     } else if (state_ == GameState::MainMenu) {
+        target_cam_pos_ = {0.0f, 3.0f, 30.0f};
+        target_cam_target_ = {0.0f, 0.0f, 0.0f};
+    } else if (state_ == GameState::MultiplayerMenu) {
         target_cam_pos_ = {0.0f, 3.0f, 30.0f};
         target_cam_target_ = {0.0f, 0.0f, 0.0f};
     } else if (state_ == GameState::Settlement) {
@@ -364,7 +369,7 @@ void GameApp::Update() {
             target_cam_target_ = {0.0f, 0.0f, 1.4f};
         }
     } else { // GameState::Gameplay
-        if (is_combat_) {
+        if (engine::is_combat(mode_)) {
             target_cam_pos_ = {0.0f, 15.0f, 3.0f};
             target_cam_target_ = {0.0f, 0.0f, 1.4f};
         } else {
@@ -390,10 +395,12 @@ void GameApp::Update() {
         UpdateStartMenu();
     } else if (state_ == GameState::MainMenu) {
         UpdateMainMenu();
+    } else if (state_ == GameState::MultiplayerMenu) {
+        UpdateMultiplayerMenu();
     } else if (state_ == GameState::Settlement) {
         UpdateSettlement();
     } else {
-        if (!is_combat_) {
+        if (engine::can_prepare(mode_)) {
             HandleInputs();
         }
         if (IsKeyPressed(KEY_ESCAPE)) {
@@ -412,13 +419,13 @@ void GameApp::Update() {
     }
 
     // 4. Combat loop update
-    if (state_ == GameState::Gameplay && is_combat_ &&
-        !combat_result_announced_) {
+    if (state_ == GameState::Gameplay && engine::is_combat(mode_) &&
+        !engine::result_announced(mode_)) {
         combat_tick_timer += GetFrameTime();
         while (combat_tick_timer >= combat_tick_interval) {
             combat_tick_timer -= combat_tick_interval;
             ProcessCombatTick();
-            if (combat_result_announced_)
+            if (engine::result_announced(mode_))
                 break;
         }
     }
@@ -467,7 +474,7 @@ void GameApp::Update() {
     }
 
     // 6. Monitor Board to update/synchronize VisualSlime states
-    engine::Board &active_board = is_combat_ ? combat_board_ : session_.board_;
+    engine::Board &active_board = engine::active_board(mode_);
 
     // Add or update active units
     for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
@@ -779,7 +786,7 @@ void GameApp::DrawMainMenu() {
                 std::string file = std::string(GetApplicationDirectory()) +
                                    "save_slot_" + std::to_string(i) + ".txt";
                 if (is_saving_mode_) {
-                    bool ok = save(session_, file);
+                    bool ok = save(engine::session(mode_), file);
                     if (ok) {
                         status_msg_ = "Game saved to Slot " +
                                       std::to_string(i) + " successfully!";
@@ -790,21 +797,17 @@ void GameApp::DrawMainMenu() {
                     is_slot_menu_ = false;
                 } else {
                     if (meta.exists) {
-                        bool ok = load(session_, file);
+                        bool ok = load(engine::session(mode_), file);
                         if (ok) {
-                            prep_board_copy_ = clone_board(session_.board_);
                             has_selection_ = false;
                             is_dragging_ = false;
                             selected_equip_index_ = -1;
                             is_dragging_equip_ = false;
                             drag_equip_source_index_ = -1;
-
-                            slimes_.clear();
-                            projectiles_.clear();
-                            game_in_progress_ = true;
-                            state_ = GameState::Gameplay;
+                            ApplyModeUpdate(engine::on_session_loaded(mode_));
                             status_msg_ = "Game loaded from Slot " +
                                           std::to_string(i) + " successfully!";
+                            status_msg_timer_ = 2.5f;
                         } else {
                             status_msg_ = "Failed to load game!";
                         }
@@ -858,37 +861,27 @@ void GameApp::DrawMainMenu() {
             if (game_in_progress_) {
                 state_ = GameState::Gameplay;
             } else {
-                // Start a brand new session
-                session_ = engine::GameSession();
-                slimes_.clear();
-                projectiles_.clear();
-                game_in_progress_ = true;
-                state_ = GameState::Gameplay;
-                status_msg_ =
-                    "New Game Started - Drag and drop units to position them.";
-                status_msg_timer_ = 3.0f;
+                ApplyModeUpdate(engine::start_single_player(mode_));
             }
         }
 
-        // Button 2: Multiplayer (Reserved) or Exit Game
+        // Button 2: Multiplayer or Exit Game
         const char *btn2_text =
-            game_in_progress_ ? "Exit Game" : "Multiplayer (Reserved)";
-        bool btn2_enabled =
-            game_in_progress_; // disabled originally (Multiplayer is reserved)
+            game_in_progress_ ? "Exit Game" : "Multiplayer";
+        bool btn2_enabled = true;
         if (draw_menu_btn(btn2_text, 280, btn2_enabled)) {
             if (game_in_progress_) {
-                // Reset session and return to main menu
+                ApplyModeUpdate(engine::leave_game(mode_));
                 game_in_progress_ = false;
-                session_ = engine::GameSession();
-                slimes_.clear();
-                projectiles_.clear();
-                status_msg_ = "Returned to Main Menu.";
-                status_msg_timer_ = 2.0f;
+            } else {
+                state_ = GameState::MultiplayerMenu;
+                menu_transition_cooldown_ = 0.2f;
             }
         }
 
         // Button 3: Save Game (enabled only when in progress)
-        if (draw_menu_btn("Save Game", 340, game_in_progress_)) {
+        if (draw_menu_btn("Save Game", 340,
+                          game_in_progress_ && engine::can_save(mode_))) {
             is_slot_menu_ = true;
             is_saving_mode_ = true;
         }
@@ -906,14 +899,122 @@ void GameApp::DrawMainMenu() {
     }
 }
 
+void GameApp::UpdateMultiplayerMenu() {
+    auto append_chars = [](std::string &text, bool host_field) {
+        int key = GetCharPressed();
+        while (key > 0) {
+            char ch = static_cast<char>(key);
+            bool allowed = host_field
+                               ? (std::isalnum(static_cast<unsigned char>(ch)) ||
+                                  ch == '.' || ch == '-')
+                               : std::isdigit(static_cast<unsigned char>(ch));
+            if (allowed && text.size() < (host_field ? 64u : 5u)) {
+                text.push_back(ch);
+            }
+            key = GetCharPressed();
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) && !text.empty()) {
+            text.pop_back();
+        }
+    };
+
+    if (editing_host_) {
+        append_chars(multiplayer_host_, true);
+    }
+    if (editing_port_) {
+        append_chars(multiplayer_port_, false);
+    }
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        editing_host_ = false;
+        editing_port_ = false;
+        state_ = GameState::MainMenu;
+    }
+}
+
+void GameApp::DrawMultiplayerMenu() {
+    DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 0.55f));
+
+    const char *title = "LAN MULTIPLAYER";
+    int title_w = MeasureGameText(title, 48, true);
+    DrawGameText(title, 640 - title_w / 2, 95, 48, GOLD, true);
+
+    auto draw_field = [&](const char *label, std::string &value, int y,
+                          bool active) -> bool {
+        int x = 640 - 170;
+        int w = 340;
+        int h = 42;
+        DrawGameText(label, x, y - 24, 16, LIGHTGRAY, false);
+        bool hover = CheckCollisionPointRec(
+            GetMousePosition(), {(float)x, (float)y, (float)w, (float)h});
+        DrawRectangle(x, y, w, h,
+                      active ? Color{42, 48, 64, 255}
+                             : Color{28, 28, 34, 255});
+        DrawRectangleLines(x, y, w, h, active || hover ? GOLD : GRAY);
+        std::string shown = value;
+        if (active && ((int)(GetTime() * 2) % 2 == 0)) {
+            shown += "_";
+        }
+        DrawGameText(shown.c_str(), x + 12, y + 12, 16, WHITE, false);
+        return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    };
+
+    if (draw_field("Host/IP", multiplayer_host_, 190, editing_host_)) {
+        editing_host_ = true;
+        editing_port_ = false;
+    }
+    if (draw_field("Port", multiplayer_port_, 270, editing_port_)) {
+        editing_port_ = true;
+        editing_host_ = false;
+    }
+
+    auto parse_port = [&]() -> std::uint16_t {
+        int port = multiplayer_port_.empty()
+                       ? 39090
+                       : std::atoi(multiplayer_port_.c_str());
+        if (port < 1 || port > 65535) {
+            port = 39090;
+        }
+        return static_cast<std::uint16_t>(port);
+    };
+
+    auto draw_btn = [&](const char *text, int y, bool enabled) -> bool {
+        int x = 640 - 140;
+        int w = 280;
+        int h = 45;
+        bool hover = enabled && CheckCollisionPointRec(
+                                    GetMousePosition(),
+                                    {(float)x, (float)y, (float)w, (float)h});
+        DrawRectangle(x, y, w, h,
+                      enabled ? (hover ? Color{50, 60, 90, 255}
+                                       : Color{30, 30, 38, 255})
+                              : Color{35, 35, 40, 255});
+        DrawRectangleLines(x, y, w, h,
+                           enabled ? (hover ? GOLD : GRAY) : DARKGRAY);
+        int text_w = MeasureGameText(text, 18, true);
+        DrawGameText(text, x + w / 2 - text_w / 2, y + 13, 18,
+                     enabled ? WHITE : GRAY, true);
+        return hover && menu_transition_cooldown_ <= 0.0f &&
+               IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    };
+
+    engine::ConnectionConfig config{multiplayer_host_, parse_port()};
+    if (draw_btn("Host Game", 350, true)) {
+        ApplyModeUpdate(engine::host_multiplayer(mode_, config));
+    }
+    if (draw_btn("Join Game", 410, !multiplayer_host_.empty())) {
+        ApplyModeUpdate(engine::join_multiplayer(mode_, config));
+    }
+    if (draw_btn("Back", 470, true)) {
+        state_ = GameState::MainMenu;
+        menu_transition_cooldown_ = 0.2f;
+    }
+}
+
 void GameApp::UpdateSettlement() {
     if (GetKeyPressed() != 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         state_ = GameState::MainMenu;
         game_in_progress_ = false;
-        is_combat_ = false;
-        session_ = engine::GameSession();
-        slimes_.clear();
-        projectiles_.clear();
+        ApplyModeUpdate(engine::leave_game(mode_));
         menu_transition_cooldown_ = 0.25f;
     }
 }
@@ -959,7 +1060,7 @@ void GameApp::DrawSettlement() {
         desc2 = "all 20 rounds of Slime Tactics!";
     } else {
         desc1 = "Your forces fell. You reached Round " +
-                std::to_string(session_.round_) + ".";
+                std::to_string(engine::session(mode_).round_) + ".";
         desc2 = "Better luck next time!";
     }
 
@@ -1016,7 +1117,7 @@ void GameApp::HandleInputs() {
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         if (!over_ui) {
             if (hovered_equip_index_ != -1 &&
-                hovered_equip_index_ < (int)session_.equip_pool_.size()) {
+                hovered_equip_index_ < (int)engine::session(mode_).equip_pool_.size()) {
                 is_dragging_equip_ = true;
                 drag_equip_source_index_ = hovered_equip_index_;
                 status_msg_ = "Dragging " +
@@ -1032,7 +1133,7 @@ void GameApp::HandleInputs() {
                 selected_coord_ = hovered_coord_;
                 has_selection_ = true;
 
-                if (get_unit(session_.board_, hovered_coord_)) {
+                if (get_unit(engine::session(mode_).board_, hovered_coord_)) {
                     is_dragging_ = true;
                     drag_source_ = hovered_coord_;
                 }
@@ -1047,7 +1148,7 @@ void GameApp::HandleInputs() {
         is_dragging_ = false;
         Vector2 mouse_pos = GetMousePosition();
         if (mouse_pos.y >= 500) {
-            auto src_u = get_unit(session_.board_, drag_source_);
+            auto src_u = get_unit(engine::session(mode_).board_, drag_source_);
             if (src_u) {
                 auto &stats = unit::stats(*src_u);
                 int price =
@@ -1055,13 +1156,13 @@ void GameApp::HandleInputs() {
                         ? 2
                         : ((stats.level == 2) ? 5
                                               : ((stats.level == 3) ? 14 : 42));
-                session_.player_.gold += price;
+                engine::session(mode_).player_.gold += price;
 
                 if (!std::holds_alternative<std::monostate>(stats.equipped)) {
-                    session_.equip_pool_.push_back(stats.equipped);
+                    engine::session(mode_).equip_pool_.push_back(stats.equipped);
                 }
 
-                remove_unit(session_.board_, drag_source_);
+                remove_unit(engine::session(mode_).board_, drag_source_);
                 status_msg_ =
                     "Sold unit for " + std::to_string(price) + " Gold.";
                 status_msg_timer_ = 2.0f;
@@ -1088,7 +1189,7 @@ void GameApp::HandleInputs() {
                         for (int r = 4; r < config::engine::BOARD_ROWS; ++r) {
                             for (int c = 0; c < config::engine::BOARD_COLS;
                                  ++c) {
-                                if (auto u = get_unit(session_.board_,
+                                if (auto u = get_unit(engine::session(mode_).board_,
                                                       engine::HexCoord{r, c})) {
                                     if (unit::stats(*u).owner ==
                                         unit::Owner::PlayerCtrl) {
@@ -1098,13 +1199,13 @@ void GameApp::HandleInputs() {
                             }
                         }
                         bool is_moving_to_empty =
-                            !get_unit(session_.board_, drop_cell);
+                            !get_unit(engine::session(mode_).board_, drop_cell);
                         bool is_src_bench =
                             std::holds_alternative<engine::LinearCoord>(
                                 drag_source_);
 
                         if (is_src_bench && is_moving_to_empty &&
-                            board_units >= session_.player_.level) {
+                            board_units >= engine::session(mode_).player_.level) {
                             valid = false;
                             status_msg_ = "Board is full! Upgrade level to "
                                           "deploy more units.";
@@ -1114,8 +1215,8 @@ void GameApp::HandleInputs() {
                 }
 
                 if (valid) {
-                    auto src_u = get_unit(session_.board_, drag_source_);
-                    auto dst_u = get_unit(session_.board_, drop_cell);
+                    auto src_u = get_unit(engine::session(mode_).board_, drag_source_);
+                    auto dst_u = get_unit(engine::session(mode_).board_, drop_cell);
 
                     if (src_u && slimes_.find(src_u) != slimes_.end()) {
                         Ray ray =
@@ -1129,9 +1230,9 @@ void GameApp::HandleInputs() {
                         }
                     }
 
-                    set_unit(session_.board_, drag_source_, dst_u);
-                    set_unit(session_.board_, drop_cell, src_u);
-                    session_.check_and_merge(drop_cell);
+                    set_unit(engine::session(mode_).board_, drag_source_, dst_u);
+                    set_unit(engine::session(mode_).board_, drop_cell, src_u);
+                    engine::session(mode_).check_and_merge(drop_cell);
                 }
             }
         }
@@ -1140,9 +1241,9 @@ void GameApp::HandleInputs() {
     if (is_dragging_equip_ && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         is_dragging_equip_ = false;
         if (!over_ui && has_hover_) {
-            auto u_ptr = get_unit(session_.board_, hovered_coord_);
+            auto u_ptr = get_unit(engine::session(mode_).board_, hovered_coord_);
             if (u_ptr) {
-                bool ok = session_.equip_unit(hovered_coord_,
+                bool ok = engine::session(mode_).equip_unit(hovered_coord_,
                                               drag_equip_source_index_);
                 if (ok) {
                     status_msg_ = "Equipped unit successfully!";
@@ -1162,130 +1263,12 @@ void GameApp::HandleInputs() {
 }
 
 void GameApp::StartCombatPhase() {
-    // 1. Verify we have at least one player unit on the board
-    int player_units = 0;
-    for (int r = 4; r < config::engine::BOARD_ROWS; ++r) {
-        for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
-            if (get_unit(session_.board_, engine::HexCoord{r, c})) {
-                player_units++;
-            }
-        }
-    }
-
-    if (player_units == 0) {
-        status_msg_ =
-            "Deploy at least one unit to the board before starting combat!";
-        status_msg_timer_ = 3.0f;
-        return;
-    }
-
-    // 2. Clone board and clean up visuals
-    prep_board_copy_ = clone_board(session_.board_); // save prep state
-    combat_board_ = clone_board(session_.board_);
-
-    // Clear dead visual states
-    slimes_.clear();
-    projectiles_.clear();
-
-    // 3. Compute and apply synergies to the combat board
-    auto synergies = unit::compute_synergies(combat_board_);
-    unit::apply_combat_synergies(combat_board_, synergies);
-
-    // 4. Begin combat loop
-    is_combat_ = true;
-    combat_result_announced_ = false;
+    ApplyModeUpdate(engine::start_combat(mode_));
     combat_tick_timer = 0.0f;
-    ticks_elapsed_ = 0;
-    status_msg_ = "Combat Phase! Units auto-battling...";
 }
 
 void GameApp::ProcessCombatTick() {
-    bool player_won = false;
-    if (battle_engine_.is_combat_over(combat_board_, player_won)) {
-        player_won_combat_ = player_won;
-        EndCombatPhase();
-        return;
-    }
-
-    battle_engine_.tick(combat_board_);
-    ticks_elapsed_++;
-
-    if (battle_engine_.is_combat_over(combat_board_, player_won)) {
-        player_won_combat_ = player_won;
-        EndCombatPhase();
-    }
-}
-
-void GameApp::EndCombatPhase() {
-    combat_result_announced_ = true;
-
-    if (player_won_combat_) {
-        int reward_gold = 2 + session_.player_.level * 2;
-        session_.player_.gold += reward_gold;
-        status_msg_ =
-            "VICTORY! Gained " + std::to_string(reward_gold) + " Gold.";
-
-        // 30% drop rate of equipment item
-        if ((rand() % 100) < 30) {
-            unit::Element random_elem = static_cast<unit::Element>(rand() % 6);
-            unit::Equipment item;
-            switch (random_elem) {
-            case unit::Element::Pyro:
-                item = unit::PyroDrop{};
-                break;
-            case unit::Element::Hydro:
-                item = unit::HydroDrop{};
-                break;
-            case unit::Element::Anemo:
-                item = unit::AnemoDrop{};
-                break;
-            case unit::Element::Geo:
-                item = unit::GeoDrop{};
-                break;
-            case unit::Element::Electro:
-                item = unit::ElectroDrop{};
-                break;
-            case unit::Element::Cryo:
-                item = unit::CryoDrop{};
-                break;
-            }
-            session_.equip_pool_.push_back(item);
-            status_msg_ +=
-                " Dropped a " + GetElementName(random_elem) + " Drop!";
-        }
-    } else {
-        // Count surviving enemy units
-        int survivors = 0;
-        for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
-            for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
-                if (auto u = get_unit(combat_board_, engine::HexCoord{r, c})) {
-                    if (unit::stats(*u).owner == unit::Owner::EnemyCtrl &&
-                        unit::stats(*u).hp > 0) {
-                        survivors++;
-                    }
-                }
-            }
-        }
-        int damage = 10 + 2 * survivors;
-        session_.player_.hp = std::max(0, session_.player_.hp - damage);
-        status_msg_ = "DEFEAT! Took " + std::to_string(damage) + " damage.";
-        if (session_.player_.hp <= 0) {
-            status_msg_ += " GAME OVER!";
-        }
-    }
-
-    // Check game victory/failure conditions
-    if (session_.player_.hp <= 0) {
-        state_ = GameState::Settlement;
-        player_won_game_ = false;
-        combat_result_announced_ = false;
-    } else if (session_.round_ == 20) {
-        state_ = GameState::Settlement;
-        player_won_game_ = true;
-        combat_result_announced_ = false;
-        is_combat_ =
-            false; // Reset combat flag for Victory (StartMenu background)
-    }
+    ApplyModeUpdate(engine::process_combat_tick(mode_));
 }
 
 void GameApp::Draw() {
@@ -1302,6 +1285,8 @@ void GameApp::Draw() {
         DrawStartMenu();
     } else if (state_ == GameState::MainMenu) {
         DrawMainMenu();
+    } else if (state_ == GameState::MultiplayerMenu) {
+        DrawMultiplayerMenu();
     } else if (state_ == GameState::Settlement) {
         DrawSettlement();
     } else {
@@ -1320,10 +1305,10 @@ void GameApp::DrawGame3D() {
         rlEnableBackfaceCulling();
     }
 
-    engine::Board &active_board = is_combat_ ? combat_board_ : session_.board_;
+    engine::Board &active_board = engine::active_board(mode_);
 
     // 1. Draw Board hexagonal cells
-    int r_start = is_combat_ ? 0 : 4;
+    int r_start = engine::is_combat(mode_) ? 0 : 4;
     for (int r = r_start; r < config::engine::BOARD_ROWS; ++r) {
         for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
             engine::HexCoord coord{r, c};
@@ -1354,7 +1339,7 @@ void GameApp::DrawGame3D() {
     }
 
     // 2. Draw Bench Slots (hidden during combat)
-    if (!is_combat_) {
+    if (!engine::is_combat(mode_)) {
         for (int i = 0; i < config::engine::BENCH_SIZE; ++i) {
             Vector3 pos = GetBenchWorldPos(i);
             bool highlight = false;
@@ -1375,14 +1360,14 @@ void GameApp::DrawGame3D() {
     }
 
     // 3. Draw Equipment Slots (hidden during combat)
-    if (!is_combat_) {
+    if (!engine::is_combat(mode_)) {
         for (int i = 0; i < 8; ++i) {
             Vector3 pos = GetEquipWorldPos(i);
             bool eq_highlight = (hovered_equip_index_ == i);
             DrawHexCell(pos, Color{45, 45, 55, 255}, eq_highlight);
 
             // Draw equipment sphere floating in slot if present
-            if (i < (int)session_.equip_pool_.size()) {
+            if (i < (int)engine::session(mode_).equip_pool_.size()) {
                 // Float sphere
                 Vector3 sphere_pos = pos;
                 if (is_dragging_equip_ && drag_equip_source_index_ == i) {
@@ -1399,7 +1384,7 @@ void GameApp::DrawGame3D() {
                     sphere_pos.y += 0.35f + sin(GetTime() * 3.0f + i) * 0.08f;
                 }
 
-                unit::Equipment eq = session_.equip_pool_[i];
+                unit::Equipment eq = engine::session(mode_).equip_pool_[i];
                 unit::Element elem = unit::Element::Pyro;
                 if (std::holds_alternative<unit::PyroDrop>(eq))
                     elem = unit::Element::Pyro;
@@ -1432,7 +1417,7 @@ void GameApp::DrawGame3D() {
             continue;
 
         // Hide enemy units in Prep phase
-        if (!is_combat_) {
+        if (!engine::is_combat(mode_)) {
             if (std::holds_alternative<HexCoord>(v.last_coord)) {
                 auto hex = std::get<HexCoord>(v.last_coord);
                 if (hex.r < 4)
@@ -1686,6 +1671,8 @@ static void DrawStar2D(float cx, float cy, float outerRadius, float innerRadius,
 }
 
 void GameApp::DrawGame2D() {
+    bool can_prepare = engine::can_prepare(mode_);
+
     // 1. Draw HUD top stats bar
     DrawRectangle(0, 0, 1280, 60, Color{16, 16, 20, 240});
     DrawRectangleLines(0, 0, 1280, 60, Color{40, 40, 50, 255});
@@ -1693,27 +1680,27 @@ void GameApp::DrawGame2D() {
     // Player HP
     DrawGameText("PLAYER HP:", 30, 20, 22, LIGHTGRAY);
     DrawRectangle(150, 20, 200, 20, DARKGRAY);
-    float hp_pct = session_.player_.hp / 100.0f;
+    float hp_pct = engine::session(mode_).player_.hp / 100.0f;
     DrawRectangle(150, 20, (int)(200 * hp_pct), 20,
                   hp_pct > 0.4f ? GREEN : RED);
-    std::string hp_text = std::to_string(session_.player_.hp) + "/100";
+    std::string hp_text = std::to_string(engine::session(mode_).player_.hp) + "/100";
     DrawGameText(hp_text.c_str(), 220, 22, 18, WHITE);
 
     // Player Gold
     DrawGameText("GOLD:", 400, 20, 22, LIGHTGRAY);
-    std::string gold_text = std::to_string(session_.player_.gold) + " G";
+    std::string gold_text = std::to_string(engine::session(mode_).player_.gold) + " G";
     DrawGameText(gold_text.c_str(), 470, 20, 22, GOLD);
 
     // Player Level
     DrawGameText("LEVEL:", 580, 20, 22, LIGHTGRAY);
-    std::string level_text = std::to_string(session_.player_.level);
+    std::string level_text = std::to_string(engine::session(mode_).player_.level);
     DrawGameText(level_text.c_str(), 660, 20, 22, SKYBLUE);
 
     // Board population count (only count PlayerCtrl units)
     int board_units = 0;
     for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
         for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
-            if (auto u = get_unit(is_combat_ ? combat_board_ : session_.board_,
+            if (auto u = get_unit(engine::is_combat(mode_) ? engine::active_board(mode_) : engine::session(mode_).board_,
                                   engine::HexCoord{r, c})) {
                 if (unit::stats(*u).owner == unit::Owner::PlayerCtrl) {
                     board_units++;
@@ -1722,16 +1709,16 @@ void GameApp::DrawGame2D() {
         }
     }
     std::string pop_text = "(" + std::to_string(board_units) + "/" +
-                           std::to_string(session_.player_.level) + ")";
+                           std::to_string(engine::session(mode_).player_.level) + ")";
     DrawGameText(pop_text.c_str(), 690, 22, 18, LIGHTGRAY);
 
     // Round number
     DrawGameText("ROUND:", 800, 20, 22, LIGHTGRAY);
-    std::string round_text = std::to_string(session_.round_);
+    std::string round_text = std::to_string(engine::session(mode_).round_);
     DrawGameText(round_text.c_str(), 890, 20, 22, WHITE);
 
     // Phase Indicator / Start Combat Button
-    if (is_combat_) {
+    if (engine::is_combat(mode_)) {
         DrawRectangle(980, 15, 200, 30, RED);
         DrawRectangleLines(980, 15, 200, 30, Color{100, 30, 30, 255});
         int text_w = MeasureGameText("COMBAT", 16, true);
@@ -1767,7 +1754,7 @@ void GameApp::DrawGame2D() {
     DrawGameText("ACTIVE RESONANCES", 30, 130, 18, GOLD);
 
     auto active_synergies =
-        unit::compute_synergies(is_combat_ ? combat_board_ : session_.board_);
+        unit::compute_synergies(engine::is_combat(mode_) ? engine::active_board(mode_) : engine::session(mode_).board_);
 
     int sy_y = 170;
     auto draw_synergy_item = [&](const char *name, int count, bool active,
@@ -1816,8 +1803,8 @@ void GameApp::DrawGame2D() {
         DrawRectangle(x, y, w, h, Color{28, 28, 34, 255});
         DrawRectangleLines(x, y, w, h, Color{55, 55, 65, 255});
 
-        if (session_.shop_[i].has_value()) {
-            auto &[unit, cost] = *session_.shop_[i];
+        if (engine::session(mode_).shop_[i].has_value()) {
+            auto &[unit, cost] = *engine::session(mode_).shop_[i];
             Color col = GetElementColor(unit::element(unit));
             auto stats = unit::stats(unit);
 
@@ -1859,9 +1846,9 @@ void GameApp::DrawGame2D() {
             DrawGameText("BUY", btn_x + btn_w / 2 - 14, btn_y + 8, 14, WHITE);
 
             // Click check
-            if (!is_combat_ && hover &&
+            if (can_prepare && hover &&
                 IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                bool ok = session_.buy_unit(i);
+                bool ok = engine::session(mode_).buy_unit(i);
                 if (!ok) {
                     status_msg_ = "Insufficient gold or bench slots!";
                     status_msg_timer_ = 2.0f;
@@ -1882,20 +1869,20 @@ void GameApp::DrawGame2D() {
                                 Color hover_col, auto action_func,
                                 bool active = true) {
         int h = 45;
-        bool hover = active && !is_combat_ &&
+        bool hover = active && can_prepare &&
                      CheckCollisionPointRec(GetMousePosition(),
                                             {(float)action_x, (float)y,
                                              (float)action_w, (float)h});
         DrawRectangle(action_x, y, action_w, h,
-                      active && !is_combat_ ? (hover ? hover_col : col)
+                      active && can_prepare ? (hover ? hover_col : col)
                                             : DARKGRAY);
         DrawRectangleLines(action_x, y, action_w, h, Color{60, 60, 70, 255});
 
         int text_w = MeasureGameText(text, 16);
         DrawGameText(text, action_x + action_w / 2 - text_w / 2, y + 16, 16,
-                     active && !is_combat_ ? WHITE : GRAY);
+                     active && can_prepare ? WHITE : GRAY);
 
-        if (active && !is_combat_ && hover &&
+        if (active && can_prepare && hover &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             action_func();
         }
@@ -1904,7 +1891,7 @@ void GameApp::DrawGame2D() {
     // 1. Refresh Shop Button
     draw_shop_action("REFRESH (1G)", 536, Color{140, 60, 30, 255},
                      Color{180, 80, 40, 255}, [&]() {
-                         bool ok = session_.refresh_shop(false);
+                         bool ok = engine::session(mode_).refresh_shop(false);
                          if (!ok) {
                              status_msg_ = "Insufficient gold to refresh shop!";
                              status_msg_timer_ = 2.0f;
@@ -1912,14 +1899,14 @@ void GameApp::DrawGame2D() {
                      });
 
     // 2. Freeze Shop Button
-    std::string freeze_lbl = session_.shop_frozen_ ? "FROZEN" : "FREEZE SHOP";
-    Color freeze_col = session_.shop_frozen_ ? Color{30, 144, 255, 255}
+    std::string freeze_lbl = engine::session(mode_).shop_frozen_ ? "FROZEN" : "FREEZE SHOP";
+    Color freeze_col = engine::session(mode_).shop_frozen_ ? Color{30, 144, 255, 255}
                                              : Color{20, 100, 130, 255};
-    Color freeze_hover = session_.shop_frozen_ ? Color{50, 190, 240, 255}
+    Color freeze_hover = engine::session(mode_).shop_frozen_ ? Color{50, 190, 240, 255}
                                                : Color{30, 130, 170, 255};
     draw_shop_action(freeze_lbl.c_str(), 596, freeze_col, freeze_hover, [&]() {
-        session_.shop_frozen_ = !session_.shop_frozen_;
-        if (session_.shop_frozen_) {
+        engine::session(mode_).shop_frozen_ = !engine::session(mode_).shop_frozen_;
+        if (engine::session(mode_).shop_frozen_) {
             status_msg_ = "Shop frozen for the next round!";
         } else {
             status_msg_ = "Shop unfrozen.";
@@ -1928,11 +1915,11 @@ void GameApp::DrawGame2D() {
     });
 
     // 3. Buy XP / Level (Upgrade) Button
-    int lvl_cost = session_.player_.level * 5 + 5;
+    int lvl_cost = engine::session(mode_).player_.level * 5 + 5;
     std::string level_btn_lbl = "LEVEL UP (" + std::to_string(lvl_cost) + "G)";
     draw_shop_action(level_btn_lbl.c_str(), 656, Color{30, 60, 140, 255},
                      Color{40, 80, 180, 255}, [&]() {
-                         bool ok = session_.buy_level();
+                         bool ok = engine::session(mode_).buy_level();
                          if (!ok) {
                              status_msg_ = "Insufficient gold to buy level!";
                              status_msg_timer_ = 2.0f;
@@ -1944,12 +1931,12 @@ void GameApp::DrawGame2D() {
                      });
 
     // Drag-to-Sell Shop Area Overlay
-    if (!is_combat_ && is_dragging_) {
+    if (can_prepare && is_dragging_) {
         Vector2 mouse_pos = GetMousePosition();
         bool mouse_in_shop = (mouse_pos.y >= 500);
 
         // Get sell price of dragged unit
-        auto src_u = get_unit(session_.board_, drag_source_);
+        auto src_u = get_unit(engine::session(mode_).board_, drag_source_);
         int price = 0;
         if (src_u) {
             auto &stats = unit::stats(*src_u);
@@ -1998,7 +1985,7 @@ void GameApp::DrawGame2D() {
             continue;
 
         // Skip enemy units in Prep phase
-        if (!is_combat_) {
+        if (!engine::is_combat(mode_)) {
             if (std::holds_alternative<HexCoord>(v.last_coord)) {
                 auto hex = std::get<HexCoord>(v.last_coord);
                 if (hex.r < 4)
@@ -2087,7 +2074,12 @@ void GameApp::DrawGame2D() {
     }
 
     // 6. Draw Combat Result popup overlay
-    if (combat_result_announced_) {
+    if (engine::result_announced(mode_)) {
+        engine::CombatResult result = engine::combat_result(mode_);
+        bool won = engine::player_won_combat(mode_);
+        bool draw = result == engine::CombatResult::Draw;
+        Color result_color = won ? GREEN : (draw ? GOLD : RED);
+
         DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 0.7f));
 
         int box_w = 400;
@@ -2096,19 +2088,17 @@ void GameApp::DrawGame2D() {
         int box_y = 360 - box_h / 2;
 
         DrawRectangle(box_x, box_y, box_w, box_h, Color{25, 25, 30, 255});
-        DrawRectangleLines(box_x, box_y, box_w, box_h,
-                           player_won_combat_ ? GREEN : RED);
+        DrawRectangleLines(box_x, box_y, box_w, box_h, result_color);
 
-        std::string title = player_won_combat_ ? "VICTORY!" : "DEFEAT!";
-        Color title_color = player_won_combat_ ? GREEN : RED;
+        std::string title = engine::result_title(result);
         DrawGameText(title.c_str(),
                      box_x + box_w / 2 - MeasureGameText(title.c_str(), 28) / 2,
-                     box_y + 30, 28, title_color);
+                     box_y + 30, 28, result_color);
 
-        std::string desc = player_won_combat_
-                               ? "You cleared the stage. Obtained Gold!"
-                               : "Your forces fell. Lost player health!";
-        if (session_.player_.hp <= 0) {
+        std::string desc = won ? "You cleared the stage. Obtained Gold!"
+                               : (draw ? "Both teams fell at the same time."
+                                       : "Your forces fell. Lost player health!");
+        if (engine::session(mode_).player_.hp <= 0) {
             desc = "Your health reached 0! GAME OVER!";
         }
         DrawGameText(desc.c_str(),
@@ -2131,74 +2121,7 @@ void GameApp::DrawGame2D() {
                      ok_y + 10, 16, WHITE);
 
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            combat_result_announced_ = false;
-            // Check if player died, restart session
-            if (session_.player_.hp <= 0) {
-                session_ = engine::GameSession();
-                slimes_.clear();
-                projectiles_.clear();
-                status_msg_ =
-                    "New Game Started - Drag and drop units to position them.";
-                status_msg_timer_ = 3.0f;
-            } else {
-                // Restore board to prep state
-                session_.board_ = prep_board_copy_;
-
-                // Reset stats for all units on board/bench (heal to full)
-                for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
-                    for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
-                        HexCoord cell{r, c};
-                        if (auto u_ptr = get_unit(session_.board_, cell)) {
-                            auto &s = unit::stats(*u_ptr);
-                            s.hp = s.max_hp;
-                            s.mana = 0;
-                            s.state = unit::State::Idle;
-                            s.stun_ticks = 0;
-                            s.attack_cooldown = 0;
-                            s.move_cooldown = 0;
-                        }
-                    }
-                }
-                for (int i = 0; i < config::engine::BENCH_SIZE; ++i) {
-                    LinearCoord cell{i};
-                    if (auto u_ptr = get_unit(session_.board_, cell)) {
-                        auto &s = unit::stats(*u_ptr);
-                        s.hp = s.max_hp;
-                        s.mana = 0;
-                        s.state = unit::State::Idle;
-                        s.stun_ticks = 0;
-                        s.attack_cooldown = 0;
-                        s.move_cooldown = 0;
-                    }
-                }
-
-                // Increment round, spawn new enemies, and reset phase
-                session_.round_++;
-                session_.spawn_enemies();
-                if (!session_.shop_frozen_) {
-                    session_.refresh_shop(true);
-                } else {
-                    session_.shop_frozen_ =
-                        false; // reset shop freeze state for the next round
-                }
-
-                // Gained Gold: base gold + interest (max 5G interest)
-                int base_gold = 2 + session_.player_.level;
-                int interest = std::min(5, session_.player_.gold / 10);
-                session_.player_.gold += base_gold + interest;
-                status_msg_ =
-                    "Round " + std::to_string(session_.round_) +
-                    " Started! Gained " + std::to_string(base_gold + interest) +
-                    " G (Interest: " + std::to_string(interest) + " G).";
-                status_msg_timer_ = 4.0f;
-
-                is_combat_ = false;
-                slimes_.clear();
-                projectiles_.clear();
-                status_msg_ =
-                    "Preparation Phase - Drag and drop units to position them.";
-                status_msg_timer_ = 3.0f;
-            }
+            ApplyModeUpdate(engine::acknowledge_result(mode_));
         }
     }
 }

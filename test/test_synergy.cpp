@@ -133,6 +133,26 @@ void test_deal_damage_synergies() {
         assert(stats(*enemy).hp == enemy_base_hp - 114);
     }
 
+    // Enemy owner uses the same resonance rules in multiplayer combat.
+    {
+        Board board;
+        init_board(board);
+        auto enemy_geo1 = std::make_shared<Unit>(GeoSlime(Owner::EnemyCtrl));
+        auto enemy_geo2 = std::make_shared<Unit>(GeoSlime(Owner::EnemyCtrl));
+        auto player = std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl));
+
+        set_unit(board, HexCoord{0, 0}, enemy_geo1);
+        set_unit(board, HexCoord{0, 1}, enemy_geo2);
+        set_unit(board, HexCoord{4, 0}, player);
+
+        auto active = compute_synergies(board, Owner::EnemyCtrl);
+        assert(active.enduring_rock);
+
+        int player_base_hp = stats(*player).hp;
+        deal_damage(board, *enemy_geo1, *player, 100);
+        assert(stats(*player).hp == player_base_hp - 114);
+    }
+
     // Protective Canopy: player units take 15% less damage
     {
         Board board;

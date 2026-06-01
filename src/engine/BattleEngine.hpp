@@ -7,6 +7,8 @@
 
 namespace Synera::engine {
 
+enum class CombatResult { Ongoing, PlayerWin, EnemyWin, Draw };
+
 class BattleEngine {
   public:
     BattleEngine() = default;
@@ -160,7 +162,7 @@ class BattleEngine {
         }
     }
 
-    bool is_combat_over(const Board &board, bool &player_won) const {
+    CombatResult combat_result(const Board &board) const {
         int player_units = 0;
         int enemy_units = 0;
 
@@ -180,11 +182,22 @@ class BattleEngine {
             }
         }
 
-        if (player_units == 0 || enemy_units == 0) {
-            player_won = (player_units > 0);
-            return true;
+        if (player_units == 0 && enemy_units == 0) {
+            return CombatResult::Draw;
         }
-        return false;
+        if (player_units == 0) {
+            return CombatResult::EnemyWin;
+        }
+        if (enemy_units == 0) {
+            return CombatResult::PlayerWin;
+        }
+        return CombatResult::Ongoing;
+    }
+
+    bool is_combat_over(const Board &board, bool &player_won) const {
+        CombatResult result = combat_result(board);
+        player_won = result == CombatResult::PlayerWin;
+        return result != CombatResult::Ongoing;
     }
 };
 

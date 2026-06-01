@@ -241,7 +241,7 @@ inline constexpr void tag_invoke(__tag::normal_attack_t, T &&a, B &&board,
             // High Voltage (Electro Resonance): normal attack mana gain +5
             // (total 15) for Electro units
             int mana_gain = 10;
-            auto synergies = compute_synergies(board);
+            auto synergies = compute_synergies(board, stats(a).owner);
             if (synergies.high_voltage && element(a) == Element::Electro) {
                 mana_gain = 15;
             }

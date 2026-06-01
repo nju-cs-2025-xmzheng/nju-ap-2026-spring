@@ -241,19 +241,55 @@ class GameSession {
             }
         }
 
-        int count = std::min(6, round_);
-        int star_level = std::min(4, (round_ - 1) / 3 + 1);
+        std::vector<int> star_levels = get_enemy_star_levels(round_);
+        int count = star_levels.size();
 
         for (int i = 0; i < count; ++i) {
             unit::Element elem = static_cast<unit::Element>(i % 6);
             HexCoord pos{1, 1 + i};
             set_unit(board_, pos,
-                     std::make_shared<unit::Unit>(
-                         make_slime(elem, star_level, unit::Owner::EnemyCtrl)));
+                     std::make_shared<unit::Unit>(make_slime(
+                         elem, star_levels[i], unit::Owner::EnemyCtrl)));
         }
     }
 
   private:
+    static std::vector<int> get_enemy_star_levels(int round) {
+        if (round == 1)
+            return {1};
+        if (round == 2)
+            return {1, 1};
+        if (round == 3)
+            return {1, 1, 1};
+        if (round == 4)
+            return {2, 1, 1, 1};
+        if (round == 5)
+            return {2, 1, 1, 1, 1};
+        if (round == 6)
+            return {2, 2, 1, 1, 1, 1};
+        if (round == 7)
+            return {2, 2, 2, 1, 1, 1};
+        if (round == 8)
+            return {2, 2, 2, 2, 1, 1};
+        if (round == 9)
+            return {2, 2, 2, 2, 2, 2};
+        if (round == 10)
+            return {3, 2, 2, 2, 2, 2};
+        if (round == 11)
+            return {3, 3, 2, 2, 2, 2};
+        if (round == 12)
+            return {3, 3, 3, 3, 2, 2};
+        if (round == 13)
+            return {3, 3, 3, 3, 3, 3};
+        if (round == 14)
+            return {4, 3, 3, 3, 3, 3};
+        if (round == 15)
+            return {4, 4, 3, 3, 3, 3};
+        if (round == 16)
+            return {4, 4, 4, 4, 3, 3};
+        return {4, 4, 4, 4, 4, 4};
+    }
+
     static unit::Unit make_slime(unit::Element elem, int star_level,
                                  unit::Owner owner = unit::Owner::PlayerCtrl) {
         switch (elem) {

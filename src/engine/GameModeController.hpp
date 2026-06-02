@@ -11,93 +11,93 @@ class GameModeController {
     LanMultiplayerMode multiplayer_;
     ModeKind active_ = ModeKind::SinglePlayer;
 
-    friend ModeKind tag_invoke(__tag::mode_kind_t,
-                               const GameModeController &controller) {
+    friend constexpr ModeKind tag_invoke(__tag::mode_kind_t,
+                                         const GameModeController &controller) {
         return controller.active_;
     }
 
-    friend GameSession &tag_invoke(__tag::session_t,
-                                   GameModeController &controller) {
+    friend constexpr GameSession &tag_invoke(__tag::session_t,
+                                             GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return session(controller.single_);
         }
         return session(controller.multiplayer_);
     }
 
-    friend const GameSession &tag_invoke(__tag::session_t,
-                                         const GameModeController &controller) {
+    friend constexpr const GameSession &
+    tag_invoke(__tag::session_t, const GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return session(controller.single_);
         }
         return session(controller.multiplayer_);
     }
 
-    friend Board &tag_invoke(__tag::active_board_t,
-                             GameModeController &controller) {
+    friend constexpr Board &tag_invoke(__tag::active_board_t,
+                                       GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return active_board(controller.single_);
         }
         return active_board(controller.multiplayer_);
     }
 
-    friend const Board &tag_invoke(__tag::active_board_t,
-                                   const GameModeController &controller) {
+    friend constexpr const Board &
+    tag_invoke(__tag::active_board_t, const GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return active_board(controller.single_);
         }
         return active_board(controller.multiplayer_);
     }
 
-    friend bool tag_invoke(__tag::is_combat_t,
-                           const GameModeController &controller) {
+    friend constexpr bool tag_invoke(__tag::is_combat_t,
+                                     const GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return is_combat(controller.single_);
         }
         return is_combat(controller.multiplayer_);
     }
 
-    friend bool tag_invoke(__tag::can_prepare_t,
-                           const GameModeController &controller) {
+    friend constexpr bool tag_invoke(__tag::can_prepare_t,
+                                     const GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return can_prepare(controller.single_);
         }
         return can_prepare(controller.multiplayer_);
     }
 
-    friend bool tag_invoke(__tag::can_save_t,
-                           const GameModeController &controller) {
+    friend constexpr bool tag_invoke(__tag::can_save_t,
+                                     const GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return can_save(controller.single_);
         }
         return can_save(controller.multiplayer_);
     }
 
-    friend bool tag_invoke(__tag::result_announced_t,
-                           const GameModeController &controller) {
+    friend constexpr bool tag_invoke(__tag::result_announced_t,
+                                     const GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return result_announced(controller.single_);
         }
         return result_announced(controller.multiplayer_);
     }
 
-    friend CombatResult tag_invoke(__tag::combat_result_t,
-                                   const GameModeController &controller) {
+    friend constexpr CombatResult
+    tag_invoke(__tag::combat_result_t, const GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return combat_result(controller.single_);
         }
         return combat_result(controller.multiplayer_);
     }
 
-    friend bool tag_invoke(__tag::player_won_combat_t,
-                           const GameModeController &controller) {
+    friend constexpr bool tag_invoke(__tag::player_won_combat_t,
+                                     const GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return player_won_combat(controller.single_);
         }
         return player_won_combat(controller.multiplayer_);
     }
 
-    friend bool tag_invoke(__tag::player_won_game_t,
-                           const GameModeController &controller) {
+    friend constexpr bool tag_invoke(__tag::player_won_game_t,
+                                     const GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {
             return player_won_game(controller.single_);
         }

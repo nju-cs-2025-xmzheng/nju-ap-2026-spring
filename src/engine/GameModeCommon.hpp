@@ -347,11 +347,11 @@ inline std::string result_title(CombatResult result) {
     }
 }
 
-inline bool is_player_win(CombatResult result) {
+inline constexpr bool is_player_win(CombatResult result) {
     return result == CombatResult::PlayerWin;
 }
 
-inline CombatResult invert_result(CombatResult result) {
+inline constexpr CombatResult invert_result(CombatResult result) {
     if (result == CombatResult::PlayerWin) {
         return CombatResult::EnemyWin;
     }

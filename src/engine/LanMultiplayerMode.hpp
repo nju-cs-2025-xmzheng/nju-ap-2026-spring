@@ -54,64 +54,65 @@ class LanMultiplayerMode {
         remote_hp_after_ = 100;
     }
 
-    friend ModeKind tag_invoke(__tag::mode_kind_t,
-                               const LanMultiplayerMode &mode) noexcept {
+    friend constexpr ModeKind
+    tag_invoke(__tag::mode_kind_t, const LanMultiplayerMode &mode) noexcept {
         return mode.kind_;
     }
 
-    friend GameSession &tag_invoke(__tag::session_t,
-                                   LanMultiplayerMode &mode) noexcept {
+    friend constexpr GameSession &
+    tag_invoke(__tag::session_t, LanMultiplayerMode &mode) noexcept {
         return mode.session_;
     }
 
-    friend const GameSession &
+    friend constexpr const GameSession &
     tag_invoke(__tag::session_t, const LanMultiplayerMode &mode) noexcept {
         return mode.session_;
     }
 
-    friend Board &tag_invoke(__tag::active_board_t,
-                             LanMultiplayerMode &mode) noexcept {
+    friend constexpr Board &tag_invoke(__tag::active_board_t,
+                                       LanMultiplayerMode &mode) noexcept {
         return mode.is_combat_ ? mode.combat_board_ : mode.session_.board_;
     }
 
-    friend const Board &tag_invoke(__tag::active_board_t,
-                                   const LanMultiplayerMode &mode) noexcept {
+    friend constexpr const Board &
+    tag_invoke(__tag::active_board_t, const LanMultiplayerMode &mode) noexcept {
         return mode.is_combat_ ? mode.combat_board_ : mode.session_.board_;
     }
 
-    friend bool tag_invoke(__tag::is_combat_t,
-                           const LanMultiplayerMode &mode) noexcept {
+    friend constexpr bool tag_invoke(__tag::is_combat_t,
+                                     const LanMultiplayerMode &mode) noexcept {
         return mode.is_combat_;
     }
 
-    friend bool tag_invoke(__tag::can_prepare_t,
-                           const LanMultiplayerMode &mode) noexcept {
+    friend constexpr bool tag_invoke(__tag::can_prepare_t,
+                                     const LanMultiplayerMode &mode) noexcept {
         return mode.connected_ && !mode.local_ready_ && !mode.is_combat_ &&
                !mode.result_announced_;
     }
 
-    friend bool tag_invoke(__tag::can_save_t,
-                           const LanMultiplayerMode &) noexcept {
+    friend constexpr bool tag_invoke(__tag::can_save_t,
+                                     const LanMultiplayerMode &) noexcept {
         return false;
     }
 
-    friend bool tag_invoke(__tag::result_announced_t,
-                           const LanMultiplayerMode &mode) noexcept {
+    friend constexpr bool tag_invoke(__tag::result_announced_t,
+                                     const LanMultiplayerMode &mode) noexcept {
         return mode.result_announced_;
     }
 
-    friend CombatResult tag_invoke(__tag::combat_result_t,
-                                   const LanMultiplayerMode &mode) noexcept {
+    friend constexpr CombatResult
+    tag_invoke(__tag::combat_result_t,
+               const LanMultiplayerMode &mode) noexcept {
         return mode.combat_result_;
     }
 
-    friend bool tag_invoke(__tag::player_won_combat_t,
-                           const LanMultiplayerMode &mode) noexcept {
+    friend constexpr bool tag_invoke(__tag::player_won_combat_t,
+                                     const LanMultiplayerMode &mode) noexcept {
         return is_player_win(mode.combat_result_);
     }
 
-    friend bool tag_invoke(__tag::player_won_game_t,
-                           const LanMultiplayerMode &mode) noexcept {
+    friend constexpr bool tag_invoke(__tag::player_won_game_t,
+                                     const LanMultiplayerMode &mode) noexcept {
         return mode.player_won_game_;
     }
 

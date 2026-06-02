@@ -260,6 +260,74 @@ inline void apply_board_snapshot_preserving_units(Board &dst,
     dst = std::move(merged);
 }
 
+// Merge a prep board (grid + bench) into dst while keeping existing unit
+// objects wherever a unit of the same identity is present, preferring the same
+// cell. The renderer keys visual state on unit identity, so reusing the objects
+// avoids spurious death/spawn animations when a fresh authoritative board
+// arrives (e.g. a host STATE replacing the client's board).
+inline void apply_full_board_preserving_units(Board &dst, const Board &src) {
+    struct ExistingUnit {
+        std::shared_ptr<unit::Unit> ptr;
+        Coord coord;
+        bool used = false;
+    };
+
+    std::vector<ExistingUnit> existing;
+    auto gather = [&](Coord coord) {
+        if (auto u_ptr = get_unit(dst, coord)) {
+            existing.push_back({u_ptr, coord, false});
+        }
+    };
+    for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
+        for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+            gather(HexCoord{r, c});
+        }
+    }
+    for (int i = 0; i < config::engine::BENCH_SIZE; ++i) {
+        gather(LinearCoord{i});
+    }
+
+    Board merged;
+    init_board(merged);
+    auto place = [&](Coord at, const unit::Unit &incoming) {
+        int best = -1;
+        for (int i = 0; i < (int)existing.size(); ++i) {
+            if (existing[i].used ||
+                !same_unit_identity(*existing[i].ptr, incoming)) {
+                continue;
+            }
+            if (best == -1) {
+                best = i;
+            }
+            if (existing[i].coord == at) { // a unit that stayed put wins
+                best = i;
+                break;
+            }
+        }
+        if (best >= 0) {
+            *existing[best].ptr = incoming;
+            existing[best].used = true;
+            set_unit(merged, at, existing[best].ptr);
+        } else {
+            set_unit(merged, at, std::make_shared<unit::Unit>(incoming));
+        }
+    };
+    for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
+        for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+            if (auto u_ptr = get_unit(src, HexCoord{r, c})) {
+                place(HexCoord{r, c}, *u_ptr);
+            }
+        }
+    }
+    for (int i = 0; i < config::engine::BENCH_SIZE; ++i) {
+        if (auto u_ptr = get_unit(src, LinearCoord{i})) {
+            place(LinearCoord{i}, *u_ptr);
+        }
+    }
+
+    dst = std::move(merged);
+}
+
 inline std::string serialize_board_to_string(const Board &board) {
     std::ostringstream out;
     serialization::serialize(out, board);

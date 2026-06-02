@@ -609,7 +609,16 @@ class LanMultiplayerMode {
         }
 
         if (header.starts_with("STATE")) {
-            deserialize_session_from_string(payload, session_);
+            GameSession incoming;
+            deserialize_session_from_string(payload, incoming);
+            // Keep existing unit objects so the renderer doesn't replay
+            // death/spawn animations for unchanged units on every STATE.
+            apply_full_board_preserving_units(session_.board_, incoming.board_);
+            session_.player_ = incoming.player_;
+            session_.shop_ = incoming.shop_;
+            session_.equip_pool_ = std::move(incoming.equip_pool_);
+            session_.round_ = incoming.round_;
+            session_.shop_frozen_ = incoming.shop_frozen_;
             return {};
         }
 

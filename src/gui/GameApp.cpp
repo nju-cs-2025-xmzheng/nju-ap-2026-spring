@@ -1865,17 +1865,37 @@ void GameApp::DrawGame2D() {
         int text_w = MeasureGameText("COMBAT", 16, true);
         DrawGameText("COMBAT", 980 + 200 / 2 - text_w / 2, 22, 16, WHITE, true);
     } else {
-        bool hover =
-            CheckCollisionPointRec(GetMousePosition(), {980, 15, 200, 30});
-        DrawRectangle(980, 15, 200, 30,
-                      hover ? Color{40, 140, 55, 255}
-                            : Color{30, 110, 45, 255});
-        DrawRectangleLines(980, 15, 200, 30, Color{60, 60, 70, 255});
-        int text_w = MeasureGameText("START COMBAT", 16, true);
-        DrawGameText("START COMBAT", 980 + 200 / 2 - text_w / 2, 22, 16, WHITE,
-                     true);
+        bool is_multiplayer =
+            engine::mode_kind(mode_) != engine::ModeKind::SinglePlayer;
+        std::string button_text = "START COMBAT";
+        bool local_ready = false;
+        if (is_multiplayer) {
+            local_ready = mode_.multiplayer_.local_ready_;
+            int ready_count = 0;
+            if (mode_.multiplayer_.local_ready_)
+                ready_count++;
+            if (mode_.multiplayer_.remote_ready_)
+                ready_count++;
+            button_text = "READY (" + std::to_string(ready_count) + "/2)";
+        }
 
-        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        bool hover = !local_ready && CheckCollisionPointRec(GetMousePosition(),
+                                                            {980, 15, 200, 30});
+        Color btn_color;
+        if (is_multiplayer && local_ready) {
+            btn_color = Color{70, 80, 95, 255}; // sleek gray/blue when ready
+        } else {
+            btn_color =
+                hover ? Color{40, 140, 55, 255} : Color{30, 110, 45, 255};
+        }
+
+        DrawRectangle(980, 15, 200, 30, btn_color);
+        DrawRectangleLines(980, 15, 200, 30, Color{60, 60, 70, 255});
+        int text_w = MeasureGameText(button_text.c_str(), 16, true);
+        DrawGameText(button_text.c_str(), 980 + 200 / 2 - text_w / 2, 22, 16,
+                     WHITE, true);
+
+        if (!local_ready && hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             StartCombatPhase();
         }
     }

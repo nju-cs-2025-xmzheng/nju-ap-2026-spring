@@ -339,14 +339,11 @@ class LanMultiplayerMode {
                             std::istreambuf_iterator<char>());
 
         if (header.starts_with("READY")) {
-            if (kind_ != ModeKind::LanHost) {
-                return {};
-            }
             remote_hp_before_ = parse_ready_hp(header);
             if (auto board = deserialize_board_from_string(payload)) {
                 remote_ready_board_ = *board;
                 remote_ready_ = true;
-                if (local_ready_ && !is_combat_) {
+                if (kind_ == ModeKind::LanHost && local_ready_ && !is_combat_) {
                     return begin_host_combat();
                 }
                 return {"Opponent ready. Click READY when prepared.",

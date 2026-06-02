@@ -258,7 +258,6 @@ class LanMultiplayerMode {
         clear_enemy_half(mode.session_.board_);
         mode.is_combat_ = false;
         mode.local_ready_ = false;
-        mode.remote_ready_ = false;
         mode.combat_result_ = CombatResult::Ongoing;
         if (!mode.connected_) {
             update.status = "Multiplayer connection closed.";
@@ -372,6 +371,8 @@ class LanMultiplayerMode {
 
         is_combat_ = true;
         result_announced_ = false;
+        local_ready_ = false;
+        remote_ready_ = false;
         combat_result_ = CombatResult::Ongoing;
         ticks_elapsed_ = 0;
         send_snapshot();

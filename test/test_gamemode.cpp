@@ -198,6 +198,35 @@ static void test_multiplayer_draw_double_ko_enters_draw_settlement() {
     assert(mode.remote_hp_after_ == 0);
 }
 
+static void test_multiplayer_keeps_early_remote_ready_after_ack() {
+    LanMultiplayerMode mode;
+    mode.connected_ = true;
+    mode.kind_ = ModeKind::LanHost;
+    mode.session_.player_.hp = 100;
+    init_board(mode.remote_ready_board_);
+    auto remote = std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1));
+    set_unit(mode.remote_ready_board_, HexCoord{4, 1}, remote);
+    mode.remote_ready_ = true;
+    mode.result_announced_ = true;
+    mode.is_combat_ = true;
+
+    auto player = std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1));
+    set_unit(mode.session_.board_, HexCoord{4, 0}, player);
+    mode.prep_board_copy_ = clone_board(mode.session_.board_);
+
+    auto ack = acknowledge_result(mode);
+    assert(!ack.enter_settlement);
+    assert(!mode.result_announced_);
+    assert(!mode.is_combat_);
+    assert(mode.remote_ready_);
+
+    auto start = start_combat(mode);
+    assert(start.clear_visuals);
+    assert(mode.is_combat_);
+    assert(!mode.local_ready_);
+    assert(!mode.remote_ready_);
+}
+
 int main() {
     std::cout << "Running test_gamemode..." << std::endl;
     test_round_20_victory_settlement();
@@ -208,6 +237,7 @@ int main() {
     test_multiplayer_winner_enters_settlement();
     test_multiplayer_draw_scores_and_damages_evenly();
     test_multiplayer_draw_double_ko_enters_draw_settlement();
+    test_multiplayer_keeps_early_remote_ready_after_ack();
     std::cout << "test_gamemode passed!" << std::endl;
     return 0;
 }

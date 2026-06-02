@@ -60,8 +60,8 @@ struct send_text_fn {
     template <typename C>
     auto operator()(C &&conn, std::string text) const
         noexcept(noexcept(tag_invoke(__tag::send_text_t{},
-                                     std::forward<C>(conn),
-                                     std::move(text)))) -> decltype(auto) {
+                                     std::forward<C>(conn), std::move(text))))
+            -> decltype(auto) {
         return tag_invoke(__tag::send_text_t{}, std::forward<C>(conn),
                           std::move(text));
     }
@@ -106,9 +106,7 @@ class LanConnection {
   public:
     LanConnection() : socket_(io_), acceptor_(io_) {}
 
-    ~LanConnection() {
-        shutdown(*this);
-    }
+    ~LanConnection() { shutdown(*this); }
 
     LanConnection(const LanConnection &) = delete;
     LanConnection &operator=(const LanConnection &) = delete;
@@ -155,9 +153,9 @@ class LanConnection {
             std::make_shared<boost::asio::ip::tcp::resolver>(conn.io_);
         resolver->async_resolve(
             host, std::to_string(port),
-            [&conn, resolver](boost::system::error_code resolve_ec,
-                              boost::asio::ip::tcp::resolver::results_type
-                                  endpoints) {
+            [&conn,
+             resolver](boost::system::error_code resolve_ec,
+                       boost::asio::ip::tcp::resolver::results_type endpoints) {
                 if (resolve_ec) {
                     conn.fail("resolve: " + resolve_ec.message());
                     return;
@@ -199,8 +197,7 @@ class LanConnection {
         return true;
     }
 
-    friend bool tag_invoke(__tag::is_connected_t,
-                           const LanConnection &conn) {
+    friend bool tag_invoke(__tag::is_connected_t, const LanConnection &conn) {
         return conn.connected_.load();
     }
 

@@ -31,10 +31,9 @@ class BattleEngine {
                 if (auto u_ptr = get_unit(board, cell)) {
                     auto &stats = unit::stats(*u_ptr);
                     if (stats.hp > 0) {
-                        units.push_back({u_ptr, cell, stats.state,
-                                         stats.attack_cooldown,
-                                         stats.move_cooldown,
-                                         stats.stun_ticks});
+                        units.push_back(
+                            {u_ptr, cell, stats.state, stats.attack_cooldown,
+                             stats.move_cooldown, stats.stun_ticks});
                     }
                 }
             }

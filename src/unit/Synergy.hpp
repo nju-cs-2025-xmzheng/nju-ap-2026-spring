@@ -131,8 +131,7 @@ inline void deal_damage(engine::Board &board, Attacker &attacker,
     int final_dmg = base_damage;
 
     // Geo Resonance (Enduring Rock): shielded units deal 15% more damage
-    if (attacker_synergies.enduring_rock &&
-        stats(attacker).shield > 0) {
+    if (attacker_synergies.enduring_rock && stats(attacker).shield > 0) {
         final_dmg = int(final_dmg * 1.15);
     }
 

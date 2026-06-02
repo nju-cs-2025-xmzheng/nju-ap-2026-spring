@@ -56,9 +56,8 @@ class SinglePlayerMode {
         return true;
     }
 
-    friend constexpr bool
-    tag_invoke(__tag::result_announced_t,
-               const SinglePlayerMode &mode) noexcept {
+    friend constexpr bool tag_invoke(__tag::result_announced_t,
+                                     const SinglePlayerMode &mode) noexcept {
         return mode.result_announced_;
     }
 
@@ -67,15 +66,13 @@ class SinglePlayerMode {
         return mode.combat_result_;
     }
 
-    friend constexpr bool
-    tag_invoke(__tag::player_won_combat_t,
-               const SinglePlayerMode &mode) noexcept {
+    friend constexpr bool tag_invoke(__tag::player_won_combat_t,
+                                     const SinglePlayerMode &mode) noexcept {
         return is_player_win(mode.combat_result_);
     }
 
-    friend constexpr bool
-    tag_invoke(__tag::player_won_game_t,
-               const SinglePlayerMode &mode) noexcept {
+    friend constexpr bool tag_invoke(__tag::player_won_game_t,
+                                     const SinglePlayerMode &mode) noexcept {
         return mode.player_won_game_;
     }
 
@@ -83,11 +80,14 @@ class SinglePlayerMode {
                                  SinglePlayerMode &mode) {
         mode = SinglePlayerMode{};
         return {"New Game Started - Drag and drop units to position them.",
-                3.0f, true, true, false, false};
+                3.0f,
+                true,
+                true,
+                false,
+                false};
     }
 
-    friend ModeUpdate tag_invoke(__tag::leave_game_t,
-                                 SinglePlayerMode &mode) {
+    friend ModeUpdate tag_invoke(__tag::leave_game_t, SinglePlayerMode &mode) {
         mode = SinglePlayerMode{};
         return {"Returned to Main Menu.", 2.0f, true, false, false, false};
     }
@@ -112,7 +112,11 @@ class SinglePlayerMode {
         if (count_deployed_player_units(mode.session_.board_) == 0) {
             return {
                 "Deploy at least one unit to the board before starting combat!",
-                3.0f, false, false, false, false};
+                3.0f,
+                false,
+                false,
+                false,
+                false};
         }
 
         mode.prep_board_copy_ = clone_board(mode.session_.board_);
@@ -123,8 +127,12 @@ class SinglePlayerMode {
         mode.result_announced_ = false;
         mode.combat_result_ = CombatResult::Ongoing;
         mode.ticks_elapsed_ = 0;
-        return {"Combat Phase! Units auto-battling...", 0.0f, true, false,
-                false, false};
+        return {"Combat Phase! Units auto-battling...",
+                0.0f,
+                true,
+                false,
+                false,
+                false};
     }
 
     friend ModeUpdate tag_invoke(__tag::process_combat_tick_t,
@@ -133,13 +141,13 @@ class SinglePlayerMode {
             return {};
         }
 
-        mode.combat_result_ = mode.battle_engine_.combat_result(
-            mode.combat_board_);
+        mode.combat_result_ =
+            mode.battle_engine_.combat_result(mode.combat_board_);
         if (mode.combat_result_ == CombatResult::Ongoing) {
             mode.battle_engine_.tick(mode.combat_board_);
             mode.ticks_elapsed_++;
-            mode.combat_result_ = mode.battle_engine_.combat_result(
-                mode.combat_board_);
+            mode.combat_result_ =
+                mode.battle_engine_.combat_result(mode.combat_board_);
         }
 
         if (mode.combat_result_ == CombatResult::Ongoing) {
@@ -156,7 +164,11 @@ class SinglePlayerMode {
         if (mode.session_.player_.hp <= 0) {
             mode = SinglePlayerMode{};
             return {"New Game Started - Drag and drop units to position them.",
-                    3.0f, true, true, false, false};
+                    3.0f,
+                    true,
+                    true,
+                    false,
+                    false};
         }
 
         ModeUpdate update =

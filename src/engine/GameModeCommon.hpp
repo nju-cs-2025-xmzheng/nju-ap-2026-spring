@@ -206,8 +206,8 @@ inline std::string serialize_board_to_string(const Board &board) {
     return out.str();
 }
 
-inline std::optional<Board> deserialize_board_from_string(
-    const std::string &text) {
+inline std::optional<Board>
+deserialize_board_from_string(const std::string &text) {
     Board board;
     init_board(board);
     std::istringstream in(text);
@@ -255,9 +255,7 @@ struct CombatScoreUpdate {
     bool player_defeated = false;
 };
 
-inline constexpr int default_draw_damage() {
-    return 10;
-}
+inline constexpr int default_draw_damage() { return 10; }
 
 inline unit::Equipment make_drop_for_element(unit::Element element) {
     switch (element) {
@@ -277,9 +275,10 @@ inline unit::Equipment make_drop_for_element(unit::Element element) {
     return unit::PyroDrop{};
 }
 
-inline CombatScoreUpdate settle_combat_score_with_damage(
-    GameSession &session, CombatResult result, bool allow_equipment_drop,
-    int damage, int draw_reward_gold = 0) {
+inline CombatScoreUpdate
+settle_combat_score_with_damage(GameSession &session, CombatResult result,
+                                bool allow_equipment_drop, int damage,
+                                int draw_reward_gold = 0) {
     if (result == CombatResult::PlayerWin) {
         int reward_gold = 2 + session.player_.level * 2;
         session.player_.gold += reward_gold;
@@ -298,11 +297,10 @@ inline CombatScoreUpdate settle_combat_score_with_damage(
     std::string status;
     if (result == CombatResult::Draw && draw_reward_gold > 0) {
         session.player_.gold += draw_reward_gold;
-        status = "DRAW! Gained " + std::to_string(draw_reward_gold) +
-                 " Gold. Took ";
+        status =
+            "DRAW! Gained " + std::to_string(draw_reward_gold) + " Gold. Took ";
     } else {
-        status = result == CombatResult::Draw ? "DRAW! Took "
-                                              : "DEFEAT! Took ";
+        status = result == CombatResult::Draw ? "DRAW! Took " : "DEFEAT! Took ";
     }
     session.player_.hp = std::max(0, session.player_.hp - damage);
     status += std::to_string(damage) + " damage.";
@@ -312,10 +310,10 @@ inline CombatScoreUpdate settle_combat_score_with_damage(
     return {status, session.player_.hp <= 0};
 }
 
-inline int combat_score_damage(const Board &combat_board, CombatResult result,
-                               unit::Owner opposing_owner =
-                                   unit::Owner::EnemyCtrl,
-                               int draw_damage = default_draw_damage()) {
+inline int
+combat_score_damage(const Board &combat_board, CombatResult result,
+                    unit::Owner opposing_owner = unit::Owner::EnemyCtrl,
+                    int draw_damage = default_draw_damage()) {
     if (result == CombatResult::Draw) {
         return draw_damage;
     }
@@ -323,15 +321,12 @@ inline int combat_score_damage(const Board &combat_board, CombatResult result,
     return 10 + 2 * survivors;
 }
 
-inline CombatScoreUpdate settle_combat_score(GameSession &session,
-                                             const Board &combat_board,
-                                             CombatResult result,
-                                             bool allow_equipment_drop,
-                                             unit::Owner opposing_owner =
-                                                 unit::Owner::EnemyCtrl,
-                                             int draw_reward_gold = 0,
-                                             int draw_damage =
-                                                 default_draw_damage()) {
+inline CombatScoreUpdate
+settle_combat_score(GameSession &session, const Board &combat_board,
+                    CombatResult result, bool allow_equipment_drop,
+                    unit::Owner opposing_owner = unit::Owner::EnemyCtrl,
+                    int draw_reward_gold = 0,
+                    int draw_damage = default_draw_damage()) {
     return settle_combat_score_with_damage(
         session, result, allow_equipment_drop,
         combat_score_damage(combat_board, result, opposing_owner, draw_damage),
@@ -417,8 +412,7 @@ inline ModeUpdate advance_to_next_preparation(GameSession &session,
     }
     status += ".";
 
-    return ModeUpdate{
-        status, 3.0f, true, false, false, false};
+    return ModeUpdate{status, 3.0f, true, false, false, false};
 }
 
 } // namespace Synera::engine

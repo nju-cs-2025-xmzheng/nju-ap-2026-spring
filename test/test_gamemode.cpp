@@ -1,5 +1,5 @@
-#include "engine/SinglePlayerMode.hpp"
 #include "engine/LanMultiplayerMode.hpp"
+#include "engine/SinglePlayerMode.hpp"
 #include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <cassert>
 #include <iostream>
@@ -54,7 +54,8 @@ static void test_acknowledge_advances_score_once() {
 
     int base_gold = 2 + mode.session_.player_.level;
     int interest = std::min(5, gold_after_reward / 10);
-    assert(mode.session_.player_.gold == gold_after_reward + base_gold + interest);
+    assert(mode.session_.player_.gold ==
+           gold_after_reward + base_gold + interest);
     assert(update.status == "Round 4 Started! Gained 4 Gold + 2 interest.");
 }
 
@@ -64,9 +65,8 @@ static void test_common_score_settlement() {
     init_board(combat_board);
     session.player_.gold = 10;
     session.player_.level = 3;
-    auto victory =
-        settle_combat_score(session, combat_board, CombatResult::PlayerWin,
-                            false);
+    auto victory = settle_combat_score(session, combat_board,
+                                       CombatResult::PlayerWin, false);
     assert(victory.status == "VICTORY! Gained 8 Gold.");
     assert(!victory.player_defeated);
     assert(session.player_.gold == 18);
@@ -104,8 +104,7 @@ static void test_common_score_settlement() {
     reported.player_.gold = 0;
     auto reported_draw = settle_combat_score_with_damage(
         reported, CombatResult::Draw, false, 10, 2);
-    assert(reported_draw.status ==
-           "DRAW! Gained 2 Gold. Took 10 damage.");
+    assert(reported_draw.status == "DRAW! Gained 2 Gold. Took 10 damage.");
     assert(reported.player_.hp == 15);
     assert(reported.player_.gold == 2);
 

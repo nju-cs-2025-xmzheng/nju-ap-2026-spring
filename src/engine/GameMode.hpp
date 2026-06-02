@@ -1,8 +1,8 @@
 #pragma once
 
 #include "common/__cpo.hpp"
-#include "engine/BattleEngine.hpp"
-#include "engine/GameSession.hpp"
+#include "engine/BattleEngine.hpp" // IWYU pragma: keep
+#include "engine/GameSession.hpp"  // IWYU pragma: keep
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -62,7 +62,8 @@ struct session_fn {
     template <typename M>
     constexpr auto operator()(M &&mode) const
         noexcept(noexcept(tag_invoke(__tag::session_t{},
-                                     std::forward<M>(mode)))) -> decltype(auto) {
+                                     std::forward<M>(mode))))
+            -> decltype(auto) {
         return tag_invoke(__tag::session_t{}, std::forward<M>(mode));
     }
 };
@@ -81,7 +82,8 @@ struct is_combat_fn {
     template <typename M>
     constexpr auto operator()(M &&mode) const
         noexcept(noexcept(tag_invoke(__tag::is_combat_t{},
-                                     std::forward<M>(mode)))) -> decltype(auto) {
+                                     std::forward<M>(mode))))
+            -> decltype(auto) {
         return tag_invoke(__tag::is_combat_t{}, std::forward<M>(mode));
     }
 };
@@ -100,7 +102,8 @@ struct can_save_fn {
     template <typename M>
     constexpr auto operator()(M &&mode) const
         noexcept(noexcept(tag_invoke(__tag::can_save_t{},
-                                     std::forward<M>(mode)))) -> decltype(auto) {
+                                     std::forward<M>(mode))))
+            -> decltype(auto) {
         return tag_invoke(__tag::can_save_t{}, std::forward<M>(mode));
     }
 };
@@ -111,8 +114,7 @@ struct result_announced_fn {
         noexcept(noexcept(tag_invoke(__tag::result_announced_t{},
                                      std::forward<M>(mode))))
             -> decltype(auto) {
-        return tag_invoke(__tag::result_announced_t{},
-                          std::forward<M>(mode));
+        return tag_invoke(__tag::result_announced_t{}, std::forward<M>(mode));
     }
 };
 
@@ -132,8 +134,7 @@ struct player_won_combat_fn {
         noexcept(noexcept(tag_invoke(__tag::player_won_combat_t{},
                                      std::forward<M>(mode))))
             -> decltype(auto) {
-        return tag_invoke(__tag::player_won_combat_t{},
-                          std::forward<M>(mode));
+        return tag_invoke(__tag::player_won_combat_t{}, std::forward<M>(mode));
     }
 };
 
@@ -184,7 +185,8 @@ struct leave_game_fn {
     template <typename M>
     constexpr auto operator()(M &&mode) const
         noexcept(noexcept(tag_invoke(__tag::leave_game_t{},
-                                     std::forward<M>(mode)))) -> decltype(auto) {
+                                     std::forward<M>(mode))))
+            -> decltype(auto) {
         return tag_invoke(__tag::leave_game_t{}, std::forward<M>(mode));
     }
 };
@@ -193,7 +195,8 @@ struct poll_mode_fn {
     template <typename M>
     constexpr auto operator()(M &&mode) const
         noexcept(noexcept(tag_invoke(__tag::poll_mode_t{},
-                                     std::forward<M>(mode)))) -> decltype(auto) {
+                                     std::forward<M>(mode))))
+            -> decltype(auto) {
         return tag_invoke(__tag::poll_mode_t{}, std::forward<M>(mode));
     }
 };
@@ -225,8 +228,7 @@ struct acknowledge_result_fn {
         noexcept(noexcept(tag_invoke(__tag::acknowledge_result_t{},
                                      std::forward<M>(mode))))
             -> decltype(auto) {
-        return tag_invoke(__tag::acknowledge_result_t{},
-                          std::forward<M>(mode));
+        return tag_invoke(__tag::acknowledge_result_t{}, std::forward<M>(mode));
     }
 };
 

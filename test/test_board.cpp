@@ -67,7 +67,8 @@ void test_board_move() {
     // Limit check: set count to limit
     auto u2 = std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1));
     set_unit(board, LinearCoord{1}, u2);
-    // Limit is 1, but we already have 1 unit on board. Moving u2 to board should fail.
+    // Limit is 1, but we already have 1 unit on board. Moving u2 to board
+    // should fail.
     move_ok = move_unit(board, LinearCoord{1}, HexCoord{6, 6}, 1);
     assert(!move_ok);
     assert(is_occupied(board, LinearCoord{1}));

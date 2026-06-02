@@ -28,9 +28,7 @@ class LanMultiplayerMode {
     int remote_hp_before_ = 100;
     int remote_hp_after_ = 100;
 
-    LanMultiplayerMode() {
-        clear_enemy_half(session_.board_);
-    }
+    LanMultiplayerMode() { clear_enemy_half(session_.board_); }
 
     void reset_state() {
         session_ = GameSession{};
@@ -76,8 +74,8 @@ class LanMultiplayerMode {
         return mode.is_combat_ ? mode.combat_board_ : mode.session_.board_;
     }
 
-    friend const Board &
-    tag_invoke(__tag::active_board_t, const LanMultiplayerMode &mode) noexcept {
+    friend const Board &tag_invoke(__tag::active_board_t,
+                                   const LanMultiplayerMode &mode) noexcept {
         return mode.is_combat_ ? mode.combat_board_ : mode.session_.board_;
     }
 
@@ -134,11 +132,15 @@ class LanMultiplayerMode {
         mode.waiting_for_peer_ = true;
         if (!network::start_host(mode.connection_, config.port)) {
             mode.waiting_for_peer_ = false;
-            return {"Failed to host LAN game.", 3.0f, true, false, false,
-                    false};
+            return {
+                "Failed to host LAN game.", 3.0f, true, false, false, false};
         }
-        return {"Hosting LAN game. Waiting for another player...", 3.0f, true,
-                false, false, false};
+        return {"Hosting LAN game. Waiting for another player...",
+                3.0f,
+                true,
+                false,
+                false,
+                false};
     }
 
     friend ModeUpdate tag_invoke(__tag::join_multiplayer_t,
@@ -150,14 +152,13 @@ class LanMultiplayerMode {
         mode.waiting_for_peer_ = true;
         if (!network::join_host(mode.connection_, config.host, config.port)) {
             mode.waiting_for_peer_ = false;
-            return {"Failed to join LAN game.", 3.0f, true, false, false,
-                    false};
+            return {
+                "Failed to join LAN game.", 3.0f, true, false, false, false};
         }
         return {"Joining LAN game...", 3.0f, true, false, false, false};
     }
 
-    friend ModeUpdate tag_invoke(__tag::poll_mode_t,
-                                 LanMultiplayerMode &mode) {
+    friend ModeUpdate tag_invoke(__tag::poll_mode_t, LanMultiplayerMode &mode) {
         ModeUpdate update;
         while (auto event = network::poll_event(mode.connection_)) {
             ModeUpdate next = mode.handle_event(*event);
@@ -177,23 +178,39 @@ class LanMultiplayerMode {
 
     friend ModeUpdate tag_invoke(__tag::on_session_loaded_t,
                                  LanMultiplayerMode &) {
-        return {"Save files are only supported in single-player mode.", 2.5f,
-                false, false, false, false};
+        return {"Save files are only supported in single-player mode.",
+                2.5f,
+                false,
+                false,
+                false,
+                false};
     }
 
     friend ModeUpdate tag_invoke(__tag::start_combat_t,
                                  LanMultiplayerMode &mode) {
         if (!mode.connected_) {
-            return {"Waiting for multiplayer connection.", 2.5f, false, false,
-                    false, false};
+            return {"Waiting for multiplayer connection.",
+                    2.5f,
+                    false,
+                    false,
+                    false,
+                    false};
         }
         if (mode.local_ready_) {
-            return {"Already ready. Waiting for opponent.", 2.0f, false, false,
-                    false, false};
+            return {"Already ready. Waiting for opponent.",
+                    2.0f,
+                    false,
+                    false,
+                    false,
+                    false};
         }
         if (count_deployed_player_units(mode.session_.board_) == 0) {
-            return {"Deploy at least one unit before readying up.", 3.0f,
-                    false, false, false, false};
+            return {"Deploy at least one unit before readying up.",
+                    3.0f,
+                    false,
+                    false,
+                    false,
+                    false};
         }
 
         mode.prep_board_copy_ = clone_board(mode.session_.board_);
@@ -212,7 +229,11 @@ class LanMultiplayerMode {
         return {mode.kind_ == ModeKind::LanHost
                     ? "Ready. Waiting for opponent..."
                     : "Ready. Waiting for host to start combat...",
-                3.0f, false, false, false, false};
+                3.0f,
+                false,
+                false,
+                false,
+                false};
     }
 
     friend ModeUpdate tag_invoke(__tag::process_combat_tick_t,
@@ -222,16 +243,16 @@ class LanMultiplayerMode {
             return {};
         }
 
-        mode.combat_result_ = mode.battle_engine_.combat_result(
-            mode.combat_board_);
+        mode.combat_result_ =
+            mode.battle_engine_.combat_result(mode.combat_board_);
         if (mode.combat_result_ == CombatResult::Ongoing) {
             mode.battle_engine_.tick(mode.combat_board_);
             mode.ticks_elapsed_++;
             if (mode.ticks_elapsed_ % 3 == 0) {
                 mode.send_snapshot();
             }
-            mode.combat_result_ = mode.battle_engine_.combat_result(
-                mode.combat_board_);
+            mode.combat_result_ =
+                mode.battle_engine_.combat_result(mode.combat_board_);
         }
 
         if (mode.combat_result_ == CombatResult::Ongoing) {
@@ -249,8 +270,12 @@ class LanMultiplayerMode {
         mode.result_announced_ = false;
         if (mode.session_.player_.hp <= 0) {
             mode.reset_state();
-            return {"New multiplayer session started.", 3.0f, true, true,
-                    false, false};
+            return {"New multiplayer session started.",
+                    3.0f,
+                    true,
+                    true,
+                    false,
+                    false};
         }
 
         ModeUpdate update =
@@ -274,18 +299,30 @@ class LanMultiplayerMode {
             return {kind_ == ModeKind::LanHost
                         ? "Player connected. Prepare your board."
                         : "Connected to host. Prepare your board.",
-                    3.0f, true, true, false, false};
+                    3.0f,
+                    true,
+                    true,
+                    false,
+                    false};
         case network::EventType::Disconnected:
             connected_ = false;
             local_ready_ = false;
             remote_ready_ = false;
             waiting_for_peer_ = false;
-            return {"Multiplayer connection closed.", 3.0f, false, false,
-                    false, false};
+            return {"Multiplayer connection closed.",
+                    3.0f,
+                    false,
+                    false,
+                    false,
+                    false};
         case network::EventType::Error:
             connected_ = false;
             waiting_for_peer_ = false;
-            return {"Network error: " + event.text, 4.0f, false, false, false,
+            return {"Network error: " + event.text,
+                    4.0f,
+                    false,
+                    false,
+                    false,
                     false};
         case network::EventType::Message:
             return handle_message(event.text);
@@ -311,8 +348,12 @@ class LanMultiplayerMode {
                 if (local_ready_ && !is_combat_) {
                     return begin_host_combat();
                 }
-                return {"Opponent ready. Click READY when prepared.", 3.0f,
-                        false, false, false, false};
+                return {"Opponent ready. Click READY when prepared.",
+                        3.0f,
+                        false,
+                        false,
+                        false,
+                        false};
             }
             return {};
         }
@@ -364,8 +405,8 @@ class LanMultiplayerMode {
     }
 
     ModeUpdate begin_host_combat() {
-        combat_board_ =
-            build_host_multiplayer_board(local_ready_board_, remote_ready_board_);
+        combat_board_ = build_host_multiplayer_board(local_ready_board_,
+                                                     remote_ready_board_);
         apply_owner_synergies(combat_board_, unit::Owner::PlayerCtrl);
         apply_owner_synergies(combat_board_, unit::Owner::EnemyCtrl);
 
@@ -376,8 +417,7 @@ class LanMultiplayerMode {
         combat_result_ = CombatResult::Ongoing;
         ticks_elapsed_ = 0;
         send_snapshot();
-        return {"Multiplayer combat started.", 2.5f, true, false, false,
-                false};
+        return {"Multiplayer combat started.", 2.5f, true, false, false, false};
     }
 
     ModeUpdate settle_relative_result() {
@@ -415,7 +455,7 @@ class LanMultiplayerMode {
     }
 
     ModeUpdate settle_multiplayer_game_end(ModeUpdate update,
-                                          bool opponent_defeated) {
+                                           bool opponent_defeated) {
         bool local_defeated = session_.player_.hp <= 0;
         if (!local_defeated && !opponent_defeated) {
             return update;
@@ -426,9 +466,7 @@ class LanMultiplayerMode {
         return update;
     }
 
-    static constexpr int multiplayer_draw_gold() {
-        return 2;
-    }
+    static constexpr int multiplayer_draw_gold() { return 2; }
 
     static int parse_ready_hp(const std::string &header) {
         std::istringstream header_in(header);
@@ -439,13 +477,12 @@ class LanMultiplayerMode {
     }
 
     void send_board(const std::string &header, const Board &board) {
-        network::send_text(connection_, header + "\n" +
-                                            serialize_board_to_string(board));
+        network::send_text(connection_,
+                           header + "\n" + serialize_board_to_string(board));
     }
 
     void send_snapshot() {
-        send_board("SNAPSHOT " + std::to_string(ticks_elapsed_),
-                   combat_board_);
+        send_board("SNAPSHOT " + std::to_string(ticks_elapsed_), combat_board_);
     }
 
     void send_result() {

@@ -47,6 +47,8 @@ enum class GameState {
     Settlement
 };
 
+enum class MultiplayerMenuState { Setup, Hosting, Joining };
+
 class GameApp {
   public:
     GameApp();
@@ -144,8 +146,9 @@ class GameApp {
     bool exit_flag_ = false;
     float menu_transition_cooldown_ = 0.0f;
     std::string multiplayer_address_;
+    std::string multiplayer_status_;
     bool editing_multiplayer_address_ = false;
-    bool multiplayer_waiting_ = false;
+    MultiplayerMenuState multiplayer_menu_state_ = MultiplayerMenuState::Setup;
 };
 
 } // namespace Synera::gui

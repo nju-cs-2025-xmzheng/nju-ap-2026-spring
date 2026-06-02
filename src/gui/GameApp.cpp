@@ -287,6 +287,10 @@ void GameApp::ApplyModeUpdate(const engine::ModeUpdate &update) {
     if (!update.status.empty()) {
         status_msg_ = update.status;
         status_msg_timer_ = update.status_timer;
+        if (state_ == GameState::MultiplayerMenu &&
+            multiplayer_menu_state_ != MultiplayerMenuState::Setup) {
+            multiplayer_status_ = update.status;
+        }
     }
     if (update.clear_visuals) {
         slimes_.clear();
@@ -294,7 +298,8 @@ void GameApp::ApplyModeUpdate(const engine::ModeUpdate &update) {
     }
     if (update.enter_gameplay) {
         game_in_progress_ = true;
-        multiplayer_waiting_ = false;
+        multiplayer_menu_state_ = MultiplayerMenuState::Setup;
+        multiplayer_status_.clear();
         editing_multiplayer_address_ = false;
         state_ = GameState::Gameplay;
     }
@@ -925,7 +930,8 @@ void GameApp::DrawMainMenu() {
                 ApplyModeUpdate(engine::leave_game(mode_));
                 game_in_progress_ = false;
             } else {
-                multiplayer_waiting_ = false;
+                multiplayer_menu_state_ = MultiplayerMenuState::Setup;
+                multiplayer_status_.clear();
                 editing_multiplayer_address_ = false;
                 state_ = GameState::MultiplayerMenu;
                 menu_transition_cooldown_ = 0.2f;
@@ -955,24 +961,27 @@ void GameApp::DrawMainMenu() {
 void GameApp::UpdateMultiplayerMenu() {
     Rectangle address_bounds = MultiplayerAddressBounds();
 
-    auto cancel_waiting = [&]() {
+    auto cancel_connection = [&]() {
         ApplyModeUpdate(engine::leave_game(mode_));
-        multiplayer_waiting_ = false;
+        multiplayer_menu_state_ = MultiplayerMenuState::Setup;
+        multiplayer_status_.clear();
         editing_multiplayer_address_ = false;
         state_ = GameState::MultiplayerMenu;
         menu_transition_cooldown_ = 0.2f;
     };
 
     auto leave_multiplayer_menu = [&]() {
-        multiplayer_waiting_ = false;
+        ApplyModeUpdate(engine::leave_game(mode_));
+        multiplayer_menu_state_ = MultiplayerMenuState::Setup;
+        multiplayer_status_.clear();
         editing_multiplayer_address_ = false;
         state_ = GameState::MainMenu;
         menu_transition_cooldown_ = 0.2f;
     };
 
-    if (multiplayer_waiting_) {
+    if (multiplayer_menu_state_ != MultiplayerMenuState::Setup) {
         if (IsKeyPressed(KEY_ESCAPE)) {
-            cancel_waiting();
+            cancel_connection();
         }
         return;
     }
@@ -1035,15 +1044,18 @@ void GameApp::DrawMultiplayerMenu() {
     };
 
     auto leave_multiplayer_menu = [&]() {
-        multiplayer_waiting_ = false;
+        ApplyModeUpdate(engine::leave_game(mode_));
+        multiplayer_menu_state_ = MultiplayerMenuState::Setup;
+        multiplayer_status_.clear();
         editing_multiplayer_address_ = false;
         state_ = GameState::MainMenu;
         menu_transition_cooldown_ = 0.2f;
     };
 
-    auto cancel_waiting = [&]() {
+    auto cancel_connection = [&]() {
         ApplyModeUpdate(engine::leave_game(mode_));
-        multiplayer_waiting_ = false;
+        multiplayer_menu_state_ = MultiplayerMenuState::Setup;
+        multiplayer_status_.clear();
         editing_multiplayer_address_ = false;
         state_ = GameState::MultiplayerMenu;
         menu_transition_cooldown_ = 0.2f;
@@ -1094,15 +1106,38 @@ void GameApp::DrawMultiplayerMenu() {
         }
     };
 
-    draw_address_field(multiplayer_waiting_);
+    bool connection_screen =
+        multiplayer_menu_state_ != MultiplayerMenuState::Setup;
+    draw_address_field(connection_screen);
 
-    if (multiplayer_waiting_) {
-        const char *waiting = "Waiting... (1/2)";
-        int waiting_w = MeasureGameText(waiting, 24, true);
-        DrawGameText(waiting, 640 - waiting_w / 2, 300, 24, LIGHTGRAY, true);
+    auto draw_connection_status = [&]() {
+        std::string text =
+            !multiplayer_status_.empty()
+                ? multiplayer_status_
+                : (multiplayer_menu_state_ == MultiplayerMenuState::Hosting
+                       ? "Waiting... (1/2)"
+                       : "Joining...");
+        constexpr int font_size = 24;
+        constexpr int max_width = 640;
+        while (!text.empty() &&
+               MeasureGameText(text.c_str(), font_size, true) > max_width) {
+            text.pop_back();
+        }
+
+        Color color = text.starts_with("Failed") ||
+                              text.starts_with("Network error")
+                          ? Color{255, 120, 120, 255}
+                          : LIGHTGRAY;
+        int text_w = MeasureGameText(text.c_str(), font_size, true);
+        DrawGameText(text.c_str(), 640 - text_w / 2, 300, font_size, color,
+                     true);
+    };
+
+    if (connection_screen) {
+        draw_connection_status();
 
         if (draw_btn("BACK", 570, 374, 140, true)) {
-            cancel_waiting();
+            cancel_connection();
         }
         return;
     }
@@ -1113,7 +1148,10 @@ void GameApp::DrawMultiplayerMenu() {
                                      ParseMultiplayerAddress(
                                          multiplayer_address_));
         ApplyModeUpdate(update);
-        multiplayer_waiting_ = !update.status.starts_with("Failed");
+        multiplayer_menu_state_ = MultiplayerMenuState::Hosting;
+        multiplayer_status_ = update.status.starts_with("Failed")
+                                  ? update.status
+                                  : "Waiting... (1/2)";
         editing_multiplayer_address_ = false;
     }
     if (draw_btn("JOIN", 655, 315, 195, true)) {
@@ -1122,7 +1160,9 @@ void GameApp::DrawMultiplayerMenu() {
                                      ParseMultiplayerAddress(
                                          multiplayer_address_));
         ApplyModeUpdate(update);
-        multiplayer_waiting_ = !update.status.starts_with("Failed");
+        multiplayer_menu_state_ = MultiplayerMenuState::Joining;
+        multiplayer_status_ = update.status.empty() ? "Joining..."
+                                                    : update.status;
         editing_multiplayer_address_ = false;
     }
     if (draw_btn("BACK", 500, 380, 280, true)) {

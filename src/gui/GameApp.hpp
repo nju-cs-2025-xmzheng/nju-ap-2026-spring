@@ -39,7 +39,13 @@ struct VisualProjectile {
     float max_radius = 1.5f;
 };
 
-enum class GameState { StartMenu, MainMenu, MultiplayerMenu, Gameplay, Settlement };
+enum class GameState {
+    StartMenu,
+    MainMenu,
+    MultiplayerMenu,
+    Gameplay,
+    Settlement
+};
 
 class GameApp {
   public:
@@ -137,10 +143,9 @@ class GameApp {
     bool is_saving_mode_ = false;
     bool exit_flag_ = false;
     float menu_transition_cooldown_ = 0.0f;
-    std::string multiplayer_host_ = "127.0.0.1";
-    std::string multiplayer_port_ = "39090";
-    bool editing_host_ = false;
-    bool editing_port_ = false;
+    std::string multiplayer_address_;
+    bool editing_multiplayer_address_ = false;
+    bool multiplayer_waiting_ = false;
 };
 
 } // namespace Synera::gui

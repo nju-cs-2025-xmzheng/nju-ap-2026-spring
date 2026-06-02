@@ -138,7 +138,7 @@ class LanMultiplayerMode {
                     false};
         }
         return {"Hosting LAN game. Waiting for another player...", 3.0f, true,
-                true, false, false};
+                false, false, false};
     }
 
     friend ModeUpdate tag_invoke(__tag::join_multiplayer_t,
@@ -153,7 +153,7 @@ class LanMultiplayerMode {
             return {"Failed to join LAN game.", 3.0f, true, false, false,
                     false};
         }
-        return {"Joining LAN game...", 3.0f, true, true, false, false};
+        return {"Joining LAN game...", 3.0f, true, false, false, false};
     }
 
     friend ModeUpdate tag_invoke(__tag::poll_mode_t,
@@ -274,7 +274,7 @@ class LanMultiplayerMode {
             return {kind_ == ModeKind::LanHost
                         ? "Player connected. Prepare your board."
                         : "Connected to host. Prepare your board.",
-                    3.0f, false, false, false, false};
+                    3.0f, true, true, false, false};
         case network::EventType::Disconnected:
             connected_ = false;
             local_ready_ = false;

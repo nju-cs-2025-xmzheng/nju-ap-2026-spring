@@ -17,6 +17,55 @@ namespace Synera::gui {
 using namespace Synera::engine;
 using namespace Synera::unit;
 
+namespace {
+
+constexpr const char *kDefaultMultiplayerHost = "0.0.0.0";
+constexpr std::uint16_t kDefaultMultiplayerPort = 39090;
+constexpr const char *kDefaultMultiplayerAddress = "0.0.0.0:39090";
+
+constexpr Rectangle MultiplayerAddressBounds() {
+    return Rectangle{430.0f, 205.0f, 420.0f, 42.0f};
+}
+
+engine::ConnectionConfig ParseMultiplayerAddress(const std::string &input) {
+    std::string host = kDefaultMultiplayerHost;
+    std::string port_text = std::to_string(kDefaultMultiplayerPort);
+
+    std::string address =
+        input.empty() ? std::string(kDefaultMultiplayerAddress) : input;
+    size_t colon = address.rfind(':');
+    if (colon == std::string::npos) {
+        if (!address.empty()) {
+            host = address;
+        }
+    } else {
+        host = address.substr(0, colon);
+        port_text = address.substr(colon + 1);
+        if (host.empty()) {
+            host = kDefaultMultiplayerHost;
+        }
+    }
+
+    int port = port_text.empty() ? kDefaultMultiplayerPort
+                                 : std::atoi(port_text.c_str());
+    if (port < 1 || port > 65535) {
+        port = kDefaultMultiplayerPort;
+    }
+
+    return engine::ConnectionConfig{host, static_cast<std::uint16_t>(port)};
+}
+
+std::string FormatMultiplayerAddress(const engine::ConnectionConfig &config) {
+    return config.host + ":" + std::to_string(config.port);
+}
+
+bool IsMultiplayerAddressChar(char ch) {
+    return std::isalnum(static_cast<unsigned char>(ch)) || ch == '.' ||
+           ch == '-' || ch == ':';
+}
+
+} // namespace
+
 struct SaveMetadata {
     bool exists = false;
     int hp = 0;
@@ -245,6 +294,8 @@ void GameApp::ApplyModeUpdate(const engine::ModeUpdate &update) {
     }
     if (update.enter_gameplay) {
         game_in_progress_ = true;
+        multiplayer_waiting_ = false;
+        editing_multiplayer_address_ = false;
         state_ = GameState::Gameplay;
     }
     if (update.enter_settlement) {
@@ -874,6 +925,8 @@ void GameApp::DrawMainMenu() {
                 ApplyModeUpdate(engine::leave_game(mode_));
                 game_in_progress_ = false;
             } else {
+                multiplayer_waiting_ = false;
+                editing_multiplayer_address_ = false;
                 state_ = GameState::MultiplayerMenu;
                 menu_transition_cooldown_ = 0.2f;
             }
@@ -900,15 +953,40 @@ void GameApp::DrawMainMenu() {
 }
 
 void GameApp::UpdateMultiplayerMenu() {
-    auto append_chars = [](std::string &text, bool host_field) {
+    Rectangle address_bounds = MultiplayerAddressBounds();
+
+    auto cancel_waiting = [&]() {
+        ApplyModeUpdate(engine::leave_game(mode_));
+        multiplayer_waiting_ = false;
+        editing_multiplayer_address_ = false;
+        state_ = GameState::MultiplayerMenu;
+        menu_transition_cooldown_ = 0.2f;
+    };
+
+    auto leave_multiplayer_menu = [&]() {
+        multiplayer_waiting_ = false;
+        editing_multiplayer_address_ = false;
+        state_ = GameState::MainMenu;
+        menu_transition_cooldown_ = 0.2f;
+    };
+
+    if (multiplayer_waiting_) {
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            cancel_waiting();
+        }
+        return;
+    }
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        editing_multiplayer_address_ =
+            CheckCollisionPointRec(GetMousePosition(), address_bounds);
+    }
+
+    auto append_address_chars = [](std::string &text) {
         int key = GetCharPressed();
         while (key > 0) {
             char ch = static_cast<char>(key);
-            bool allowed = host_field
-                               ? (std::isalnum(static_cast<unsigned char>(ch)) ||
-                                  ch == '.' || ch == '-')
-                               : std::isdigit(static_cast<unsigned char>(ch));
-            if (allowed && text.size() < (host_field ? 64u : 5u)) {
+            if (IsMultiplayerAddressChar(ch) && text.size() < 72u) {
                 text.push_back(ch);
             }
             key = GetCharPressed();
@@ -916,71 +994,30 @@ void GameApp::UpdateMultiplayerMenu() {
         if (IsKeyPressed(KEY_BACKSPACE) && !text.empty()) {
             text.pop_back();
         }
+        if (IsKeyPressed(KEY_ENTER)) {
+            text = text.empty() ? "" : FormatMultiplayerAddress(
+                                          ParseMultiplayerAddress(text));
+        }
     };
 
-    if (editing_host_) {
-        append_chars(multiplayer_host_, true);
-    }
-    if (editing_port_) {
-        append_chars(multiplayer_port_, false);
+    if (editing_multiplayer_address_) {
+        append_address_chars(multiplayer_address_);
     }
     if (IsKeyPressed(KEY_ESCAPE)) {
-        editing_host_ = false;
-        editing_port_ = false;
-        state_ = GameState::MainMenu;
+        leave_multiplayer_menu();
     }
 }
 
 void GameApp::DrawMultiplayerMenu() {
     DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 0.55f));
 
-    const char *title = "LAN MULTIPLAYER";
+    const char *title = "MULTIPLAYER";
     int title_w = MeasureGameText(title, 48, true);
-    DrawGameText(title, 640 - title_w / 2, 95, 48, GOLD, true);
+    DrawGameText(title, 640 - title_w / 2, 86, 48, GOLD, true);
 
-    auto draw_field = [&](const char *label, std::string &value, int y,
-                          bool active) -> bool {
-        int x = 640 - 170;
-        int w = 340;
-        int h = 42;
-        DrawGameText(label, x, y - 24, 16, LIGHTGRAY, false);
-        bool hover = CheckCollisionPointRec(
-            GetMousePosition(), {(float)x, (float)y, (float)w, (float)h});
-        DrawRectangle(x, y, w, h,
-                      active ? Color{42, 48, 64, 255}
-                             : Color{28, 28, 34, 255});
-        DrawRectangleLines(x, y, w, h, active || hover ? GOLD : GRAY);
-        std::string shown = value;
-        if (active && ((int)(GetTime() * 2) % 2 == 0)) {
-            shown += "_";
-        }
-        DrawGameText(shown.c_str(), x + 12, y + 12, 16, WHITE, false);
-        return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-    };
-
-    if (draw_field("Host/IP", multiplayer_host_, 190, editing_host_)) {
-        editing_host_ = true;
-        editing_port_ = false;
-    }
-    if (draw_field("Port", multiplayer_port_, 270, editing_port_)) {
-        editing_port_ = true;
-        editing_host_ = false;
-    }
-
-    auto parse_port = [&]() -> std::uint16_t {
-        int port = multiplayer_port_.empty()
-                       ? 39090
-                       : std::atoi(multiplayer_port_.c_str());
-        if (port < 1 || port > 65535) {
-            port = 39090;
-        }
-        return static_cast<std::uint16_t>(port);
-    };
-
-    auto draw_btn = [&](const char *text, int y, bool enabled) -> bool {
-        int x = 640 - 140;
-        int w = 280;
-        int h = 45;
+    auto draw_btn = [&](const char *text, int x, int y, int w,
+                        bool enabled) -> bool {
+        int h = 44;
         bool hover = enabled && CheckCollisionPointRec(
                                     GetMousePosition(),
                                     {(float)x, (float)y, (float)w, (float)h});
@@ -991,22 +1028,105 @@ void GameApp::DrawMultiplayerMenu() {
         DrawRectangleLines(x, y, w, h,
                            enabled ? (hover ? GOLD : GRAY) : DARKGRAY);
         int text_w = MeasureGameText(text, 18, true);
-        DrawGameText(text, x + w / 2 - text_w / 2, y + 13, 18,
+        DrawGameText(text, x + w / 2 - text_w / 2, y + 12, 18,
                      enabled ? WHITE : GRAY, true);
         return hover && menu_transition_cooldown_ <= 0.0f &&
                IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     };
 
-    engine::ConnectionConfig config{multiplayer_host_, parse_port()};
-    if (draw_btn("Host Game", 350, true)) {
-        ApplyModeUpdate(engine::host_multiplayer(mode_, config));
-    }
-    if (draw_btn("Join Game", 410, !multiplayer_host_.empty())) {
-        ApplyModeUpdate(engine::join_multiplayer(mode_, config));
-    }
-    if (draw_btn("Back", 470, true)) {
+    auto leave_multiplayer_menu = [&]() {
+        multiplayer_waiting_ = false;
+        editing_multiplayer_address_ = false;
         state_ = GameState::MainMenu;
         menu_transition_cooldown_ = 0.2f;
+    };
+
+    auto cancel_waiting = [&]() {
+        ApplyModeUpdate(engine::leave_game(mode_));
+        multiplayer_waiting_ = false;
+        editing_multiplayer_address_ = false;
+        state_ = GameState::MultiplayerMenu;
+        menu_transition_cooldown_ = 0.2f;
+    };
+
+    auto draw_address_field = [&](bool read_only) {
+        Rectangle bounds = MultiplayerAddressBounds();
+        int x = (int)bounds.x;
+        int y = (int)bounds.y;
+        int w = (int)bounds.width;
+        int h = (int)bounds.height;
+        bool hover = !read_only && CheckCollisionPointRec(GetMousePosition(),
+                                                          bounds);
+        bool active = !read_only && editing_multiplayer_address_;
+        DrawGameText("Address", x, y - 30, 18, LIGHTGRAY, false);
+        DrawRectangle(x, y, w, h,
+                      read_only       ? Color{24, 24, 30, 230}
+                      : active        ? Color{42, 48, 64, 255}
+                                      : Color{28, 28, 34, 255});
+        DrawRectangleLinesEx(
+            bounds, active || hover ? 2.0f : 1.0f,
+            active || hover ? GOLD : Color{110, 110, 120, 255});
+
+        bool placeholder = multiplayer_address_.empty();
+        std::string shown = read_only
+                                ? FormatMultiplayerAddress(
+                                      ParseMultiplayerAddress(
+                                          multiplayer_address_))
+                                : (placeholder ? kDefaultMultiplayerAddress
+                                               : multiplayer_address_);
+        int text_max_width = w - 28;
+        while (!shown.empty() &&
+               MeasureGameText(shown.c_str(), 16, false) > text_max_width) {
+            shown.erase(shown.begin());
+        }
+        Color text_color = read_only
+                               ? Color{205, 205, 215, 255}
+                               : (placeholder ? Color{150, 150, 160, 255}
+                                              : WHITE);
+        DrawGameText(shown.c_str(), x + 14, y + 12, 16, text_color, false);
+
+        if (active) {
+            int cursor_x =
+                x + 14 + MeasureGameText(shown.c_str(), 16, false) + 2;
+            if (((int)(GetTime() * 2.0) % 2) == 0 && cursor_x < x + w - 10) {
+                DrawRectangle(cursor_x, y + 10, 2, h - 20, GOLD);
+            }
+        }
+    };
+
+    draw_address_field(multiplayer_waiting_);
+
+    if (multiplayer_waiting_) {
+        const char *waiting = "Waiting... (1/2)";
+        int waiting_w = MeasureGameText(waiting, 24, true);
+        DrawGameText(waiting, 640 - waiting_w / 2, 300, 24, LIGHTGRAY, true);
+
+        if (draw_btn("BACK", 570, 374, 140, true)) {
+            cancel_waiting();
+        }
+        return;
+    }
+
+    if (draw_btn("HOST", 430, 315, 195, true)) {
+        engine::ModeUpdate update =
+            engine::host_multiplayer(mode_,
+                                     ParseMultiplayerAddress(
+                                         multiplayer_address_));
+        ApplyModeUpdate(update);
+        multiplayer_waiting_ = !update.status.starts_with("Failed");
+        editing_multiplayer_address_ = false;
+    }
+    if (draw_btn("JOIN", 655, 315, 195, true)) {
+        engine::ModeUpdate update =
+            engine::join_multiplayer(mode_,
+                                     ParseMultiplayerAddress(
+                                         multiplayer_address_));
+        ApplyModeUpdate(update);
+        multiplayer_waiting_ = !update.status.starts_with("Failed");
+        editing_multiplayer_address_ = false;
+    }
+    if (draw_btn("BACK", 500, 380, 280, true)) {
+        leave_multiplayer_menu();
     }
 }
 

@@ -175,6 +175,64 @@ class GameModeController {
         }
         return on_session_loaded(controller.multiplayer_);
     }
+
+    friend ModeUpdate tag_invoke(__tag::act_move_t,
+                                 GameModeController &controller, Coord from,
+                                 Coord to) {
+        if (controller.active_ == ModeKind::SinglePlayer) {
+            return act_move(controller.single_, from, to);
+        }
+        return act_move(controller.multiplayer_, from, to);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_sell_t,
+                                 GameModeController &controller, Coord at) {
+        if (controller.active_ == ModeKind::SinglePlayer) {
+            return act_sell(controller.single_, at);
+        }
+        return act_sell(controller.multiplayer_, at);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_equip_t,
+                                 GameModeController &controller, Coord at,
+                                 std::size_t pool_index) {
+        if (controller.active_ == ModeKind::SinglePlayer) {
+            return act_equip(controller.single_, at, pool_index);
+        }
+        return act_equip(controller.multiplayer_, at, pool_index);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_buy_t,
+                                 GameModeController &controller, int slot) {
+        if (controller.active_ == ModeKind::SinglePlayer) {
+            return act_buy(controller.single_, slot);
+        }
+        return act_buy(controller.multiplayer_, slot);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_refresh_t,
+                                 GameModeController &controller) {
+        if (controller.active_ == ModeKind::SinglePlayer) {
+            return act_refresh(controller.single_);
+        }
+        return act_refresh(controller.multiplayer_);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_freeze_t,
+                                 GameModeController &controller) {
+        if (controller.active_ == ModeKind::SinglePlayer) {
+            return act_freeze(controller.single_);
+        }
+        return act_freeze(controller.multiplayer_);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_level_t,
+                                 GameModeController &controller) {
+        if (controller.active_ == ModeKind::SinglePlayer) {
+            return act_level(controller.single_);
+        }
+        return act_level(controller.multiplayer_);
+    }
 };
 
 } // namespace Synera::engine

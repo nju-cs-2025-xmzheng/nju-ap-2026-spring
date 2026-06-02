@@ -133,7 +133,7 @@ static void test_multiplayer_has_no_round_20_limit() {
     mode.kind_ = ModeKind::LanHost;
     mode.session_.round_ = 20;
     mode.session_.player_.hp = 100;
-    mode.remote_hp_before_ = 100;
+    mode.remote_session_.player_.hp = 100;
     mode.prep_board_copy_ = clone_board(mode.session_.board_);
     init_board(mode.combat_board_);
     auto player = std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1));
@@ -151,7 +151,7 @@ static void test_multiplayer_winner_enters_settlement() {
     LanMultiplayerMode mode;
     mode.kind_ = ModeKind::LanHost;
     mode.session_.player_.hp = 100;
-    mode.remote_hp_before_ = 10;
+    mode.remote_session_.player_.hp = 10;
     init_board(mode.combat_board_);
     auto player = std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1));
     set_unit(mode.combat_board_, HexCoord{4, 0}, player);
@@ -168,7 +168,7 @@ static void test_multiplayer_draw_scores_and_damages_evenly() {
     mode.kind_ = ModeKind::LanHost;
     mode.session_.player_.hp = 25;
     mode.session_.player_.gold = 0;
-    mode.remote_hp_before_ = 25;
+    mode.remote_session_.player_.hp = 25;
     init_board(mode.combat_board_);
     mode.is_combat_ = true;
 
@@ -185,7 +185,7 @@ static void test_multiplayer_draw_double_ko_enters_draw_settlement() {
     LanMultiplayerMode mode;
     mode.kind_ = ModeKind::LanHost;
     mode.session_.player_.hp = 10;
-    mode.remote_hp_before_ = 10;
+    mode.remote_session_.player_.hp = 10;
     init_board(mode.combat_board_);
     mode.is_combat_ = true;
 
@@ -274,6 +274,143 @@ static void test_multiplayer_disconnect_begins_reconnect_and_resumes() {
     network::shutdown(mode.connection_);
 }
 
+// ---- Host-authoritative model ------------------------------------------
+
+static void test_mp_host_applies_buy_command() {
+    LanMultiplayerMode mode;
+    mode.kind_ = ModeKind::LanHost;
+    mode.remote_session_.player_.gold = 10;
+    mode.remote_session_.shop_[0] =
+        std::pair<Unit, int>{PyroSlime(Owner::PlayerCtrl, 1), 2};
+    mode.session_.player_.gold = 15; // host's own economy must stay untouched
+
+    mode.handle_event({network::EventType::Message, "BUY 0"});
+
+    assert(mode.remote_session_.player_.gold == 8);
+    assert(get_unit(mode.remote_session_.board_, LinearCoord{0}) != nullptr);
+    assert(mode.session_.player_.gold == 15);
+}
+
+static void test_mp_host_move_merges_authoritatively() {
+    LanMultiplayerMode mode;
+    mode.kind_ = ModeKind::LanHost;
+    mode.remote_session_.player_.level = 5; // room to deploy
+    set_unit(mode.remote_session_.board_, HexCoord{4, 0},
+             std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1)));
+    set_unit(mode.remote_session_.board_, LinearCoord{0},
+             std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1)));
+    set_unit(mode.remote_session_.board_, LinearCoord{1},
+             std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1)));
+
+    mode.handle_event({network::EventType::Message, "MOVE B 0 H 4 1"});
+
+    assert(mode.remote_session_.count_player_board_units() == 1);
+    auto merged = get_unit(mode.remote_session_.board_, HexCoord{4, 0});
+    assert(merged && stats(*merged).level == 2);
+}
+
+static void test_mp_state_roundtrip_overwrites_client() {
+    LanMultiplayerMode host;
+    host.kind_ = ModeKind::LanHost;
+    host.remote_session_.player_.gold = 42;
+    host.remote_session_.player_.level = 4;
+    host.remote_session_.round_ = 7;
+    set_unit(host.remote_session_.board_, HexCoord{4, 0},
+             std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1)));
+
+    LanMultiplayerMode client;
+    client.kind_ = ModeKind::LanClient;
+    client.handle_event(
+        {network::EventType::Message,
+         "STATE\n" + serialize_session_to_string(host.remote_session_)});
+
+    assert(client.session_.player_.gold == 42);
+    assert(client.session_.player_.level == 4);
+    assert(client.session_.round_ == 7);
+    assert(get_unit(client.session_.board_, HexCoord{4, 0}) != nullptr);
+
+    // A second STATE fully replaces the first (wholesale overwrite).
+    GameSession next;
+    clear_enemy_half(next.board_);
+    next.player_.gold = 3;
+    client.handle_event({network::EventType::Message,
+                         "STATE\n" + serialize_session_to_string(next)});
+    assert(client.session_.player_.gold == 3);
+    assert(get_unit(client.session_.board_, HexCoord{4, 0}) == nullptr);
+}
+
+static void test_mp_client_move_predicts_then_reconciles() {
+    LanMultiplayerMode client;
+    client.kind_ = ModeKind::LanClient;
+    set_unit(client.session_.board_, LinearCoord{0},
+             std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1)));
+
+    // Prediction: the local board changes immediately (no host round-trip).
+    act_move(client, Coord{LinearCoord{0}}, Coord{HexCoord{4, 0}});
+    assert(get_unit(client.session_.board_, HexCoord{4, 0}) != nullptr);
+    assert(get_unit(client.session_.board_, LinearCoord{0}) == nullptr);
+
+    // Reconciliation: an authoritative STATE wins over the prediction.
+    GameSession authoritative;
+    clear_enemy_half(authoritative.board_);
+    set_unit(authoritative.board_, HexCoord{5, 5},
+             std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1)));
+    client.handle_event(
+        {network::EventType::Message,
+         "STATE\n" + serialize_session_to_string(authoritative)});
+    assert(get_unit(client.session_.board_, HexCoord{4, 0}) == nullptr);
+    assert(get_unit(client.session_.board_, HexCoord{5, 5}) != nullptr);
+}
+
+static void test_mp_host_ready_derived_from_remote_session() {
+    LanMultiplayerMode mode;
+    mode.kind_ = ModeKind::LanHost;
+    // Host has not readied yet, so the client's READY just records remote
+    // readiness (no combat start), letting us inspect the derived board.
+    set_unit(mode.remote_session_.board_, HexCoord{4, 1},
+             std::make_shared<Unit>(PyroSlime(Owner::PlayerCtrl, 1)));
+
+    mode.handle_event({network::EventType::Message, "READY"});
+
+    assert(mode.remote_ready_);
+    assert(!mode.is_combat_);
+    // Ready board derived from remote_session_, not received over the wire.
+    assert(get_unit(mode.remote_ready_board_, HexCoord{4, 1}) != nullptr);
+    assert(get_unit(mode.remote_prep_board_copy_, HexCoord{4, 1}) != nullptr);
+}
+
+static void test_mp_host_settles_remote_session_once() {
+    LanMultiplayerMode mode;
+    mode.kind_ = ModeKind::LanHost;
+    mode.session_.player_.hp = 25;
+    mode.remote_session_.player_.hp = 25;
+    init_board(mode.combat_board_); // empty board -> draw
+    mode.is_combat_ = true;
+
+    auto result = process_combat_tick(mode);
+    assert(mode.combat_result_ == CombatResult::Draw);
+    // Damage applied exactly once on each real session.
+    assert(mode.session_.player_.hp == 15);
+    assert(mode.remote_session_.player_.hp == 15);
+    assert(mode.remote_hp_after_ == 15);
+    assert(!result.enter_settlement);
+}
+
+static void test_mp_host_advances_remote_on_ack() {
+    LanMultiplayerMode mode;
+    mode.kind_ = ModeKind::LanHost;
+    mode.remote_session_.round_ = 3;
+    mode.remote_session_.player_.hp = 50;
+    mode.remote_session_.player_.gold = 30;
+    mode.remote_prep_board_copy_ = clone_board(mode.remote_session_.board_);
+
+    mode.handle_event({network::EventType::Message, "ACK"});
+
+    assert(mode.remote_session_.round_ == 4);
+    assert(mode.remote_session_.player_.gold > 30); // round income
+    assert(mode.session_.round_ == 1); // host's own round not advanced by ACK
+}
+
 int main() {
     std::cout << "Running test_gamemode..." << std::endl;
     test_round_20_victory_settlement();
@@ -288,6 +425,13 @@ int main() {
     test_multiplayer_initial_connect_enters_gameplay();
     test_multiplayer_disconnect_without_link_closes();
     test_multiplayer_disconnect_begins_reconnect_and_resumes();
+    test_mp_host_applies_buy_command();
+    test_mp_host_move_merges_authoritatively();
+    test_mp_state_roundtrip_overwrites_client();
+    test_mp_client_move_predicts_then_reconciles();
+    test_mp_host_ready_derived_from_remote_session();
+    test_mp_host_settles_remote_session_once();
+    test_mp_host_advances_remote_on_ack();
     std::cout << "test_gamemode passed!" << std::endl;
     return 0;
 }

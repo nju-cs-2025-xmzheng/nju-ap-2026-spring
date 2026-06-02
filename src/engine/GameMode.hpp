@@ -3,6 +3,7 @@
 #include "common/__cpo.hpp"
 #include "engine/BattleEngine.hpp" // IWYU pragma: keep
 #include "engine/GameSession.hpp"  // IWYU pragma: keep
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -45,6 +46,13 @@ struct start_combat_t {};
 struct process_combat_tick_t {};
 struct acknowledge_result_t {};
 struct on_session_loaded_t {};
+struct act_move_t {};
+struct act_sell_t {};
+struct act_equip_t {};
+struct act_buy_t {};
+struct act_refresh_t {};
+struct act_freeze_t {};
+struct act_level_t {};
 } // namespace __tag
 
 namespace __fn {
@@ -241,6 +249,70 @@ struct on_session_loaded_fn {
         return tag_invoke(__tag::on_session_loaded_t{}, std::forward<M>(mode));
     }
 };
+
+struct act_move_fn {
+    template <typename M>
+    constexpr auto operator()(M &&mode, Coord from, Coord to) const
+        noexcept(noexcept(tag_invoke(__tag::act_move_t{}, std::forward<M>(mode),
+                                     from, to))) -> decltype(auto) {
+        return tag_invoke(__tag::act_move_t{}, std::forward<M>(mode), from, to);
+    }
+};
+
+struct act_sell_fn {
+    template <typename M>
+    constexpr auto operator()(M &&mode, Coord at) const
+        noexcept(noexcept(tag_invoke(__tag::act_sell_t{}, std::forward<M>(mode),
+                                     at))) -> decltype(auto) {
+        return tag_invoke(__tag::act_sell_t{}, std::forward<M>(mode), at);
+    }
+};
+
+struct act_equip_fn {
+    template <typename M>
+    constexpr auto operator()(M &&mode, Coord at, std::size_t pool_index) const
+        noexcept(noexcept(tag_invoke(__tag::act_equip_t{}, std::forward<M>(mode),
+                                     at, pool_index))) -> decltype(auto) {
+        return tag_invoke(__tag::act_equip_t{}, std::forward<M>(mode), at,
+                          pool_index);
+    }
+};
+
+struct act_buy_fn {
+    template <typename M>
+    constexpr auto operator()(M &&mode, int slot) const
+        noexcept(noexcept(tag_invoke(__tag::act_buy_t{}, std::forward<M>(mode),
+                                     slot))) -> decltype(auto) {
+        return tag_invoke(__tag::act_buy_t{}, std::forward<M>(mode), slot);
+    }
+};
+
+struct act_refresh_fn {
+    template <typename M>
+    constexpr auto operator()(M &&mode) const
+        noexcept(noexcept(tag_invoke(__tag::act_refresh_t{},
+                                     std::forward<M>(mode)))) -> decltype(auto) {
+        return tag_invoke(__tag::act_refresh_t{}, std::forward<M>(mode));
+    }
+};
+
+struct act_freeze_fn {
+    template <typename M>
+    constexpr auto operator()(M &&mode) const
+        noexcept(noexcept(tag_invoke(__tag::act_freeze_t{},
+                                     std::forward<M>(mode)))) -> decltype(auto) {
+        return tag_invoke(__tag::act_freeze_t{}, std::forward<M>(mode));
+    }
+};
+
+struct act_level_fn {
+    template <typename M>
+    constexpr auto operator()(M &&mode) const
+        noexcept(noexcept(tag_invoke(__tag::act_level_t{},
+                                     std::forward<M>(mode)))) -> decltype(auto) {
+        return tag_invoke(__tag::act_level_t{}, std::forward<M>(mode));
+    }
+};
 } // namespace __fn
 
 inline constexpr __fn::mode_kind_fn mode_kind{};
@@ -262,5 +334,12 @@ inline constexpr __fn::start_combat_fn start_combat{};
 inline constexpr __fn::process_combat_tick_fn process_combat_tick{};
 inline constexpr __fn::acknowledge_result_fn acknowledge_result{};
 inline constexpr __fn::on_session_loaded_fn on_session_loaded{};
+inline constexpr __fn::act_move_fn act_move{};
+inline constexpr __fn::act_sell_fn act_sell{};
+inline constexpr __fn::act_equip_fn act_equip{};
+inline constexpr __fn::act_buy_fn act_buy{};
+inline constexpr __fn::act_refresh_fn act_refresh{};
+inline constexpr __fn::act_freeze_fn act_freeze{};
+inline constexpr __fn::act_level_fn act_level{};
 
 } // namespace Synera::engine

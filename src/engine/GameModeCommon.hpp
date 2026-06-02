@@ -32,6 +32,66 @@ inline Board clone_board(const Board &src) {
     return dst;
 }
 
+inline ModeUpdate status_update(std::string status, float timer) {
+    return {std::move(status), timer, false, false, false, false};
+}
+
+// Preparation-phase actions, shared by single-player and the LAN host so the
+// rules and their user-facing messages live in one place (not the GUI).
+inline ModeUpdate apply_buy(GameSession &session, int slot) {
+    return session.buy_unit(slot)
+               ? status_update("Purchased Slime successfully!", 1.5f)
+               : status_update("Insufficient gold or bench slots!", 2.0f);
+}
+
+inline ModeUpdate apply_refresh(GameSession &session) {
+    return session.refresh_shop(false)
+               ? ModeUpdate{}
+               : status_update("Insufficient gold to refresh shop!", 2.0f);
+}
+
+inline ModeUpdate apply_freeze(GameSession &session) {
+    session.shop_frozen_ = !session.shop_frozen_;
+    return status_update(session.shop_frozen_ ? "Shop frozen for the next round!"
+                                              : "Shop unfrozen.",
+                         1.5f);
+}
+
+inline ModeUpdate apply_level(GameSession &session) {
+    return session.buy_level()
+               ? status_update("Upgraded player level successfully!", 1.5f)
+               : status_update("Insufficient gold to buy level!", 2.0f);
+}
+
+inline ModeUpdate apply_sell(GameSession &session, Coord at) {
+    int price = session.sell_unit(at);
+    return price >= 0 ? status_update(
+                            "Sold unit for " + std::to_string(price) + " Gold.",
+                            2.0f)
+                      : ModeUpdate{};
+}
+
+inline ModeUpdate apply_equip(GameSession &session, Coord at,
+                              std::size_t pool_index) {
+    return session.equip_unit(at, pool_index)
+               ? status_update("Equipped unit successfully!", 1.5f)
+               : status_update("Failed: unit already has equipment!", 1.5f);
+}
+
+inline ModeUpdate apply_move(GameSession &session, Coord from, Coord to) {
+    switch (session.move_unit(from, to)) {
+    case GameSession::MoveResult::EnemyHalf:
+        return status_update("Cannot place units on Enemy half (rows 0-3)!",
+                             2.5f);
+    case GameSession::MoveResult::BoardFull:
+        return status_update("Board is full! Upgrade level to deploy more "
+                             "units.",
+                             2.5f);
+    default:
+        return ModeUpdate{};
+    }
+}
+
 inline void reset_unit_for_preparation(unit::Unit &u) {
     auto &s = unit::stats(u);
     s.hp = s.max_hp;
@@ -213,6 +273,18 @@ deserialize_board_from_string(const std::string &text) {
     std::istringstream in(text);
     serialization::deserialize(in, board);
     return board;
+}
+
+inline std::string serialize_session_to_string(const GameSession &session) {
+    std::ostringstream out;
+    serialization::serialize(out, session);
+    return out.str();
+}
+
+inline void deserialize_session_from_string(const std::string &text,
+                                            GameSession &session) {
+    std::istringstream in(text);
+    serialization::deserialize(in, session);
 }
 
 inline int count_deployed_player_units(const Board &board) {

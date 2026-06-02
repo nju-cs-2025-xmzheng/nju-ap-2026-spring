@@ -178,6 +178,38 @@ class SinglePlayerMode {
         return update;
     }
 
+    friend ModeUpdate tag_invoke(__tag::act_move_t, SinglePlayerMode &mode,
+                                 Coord from, Coord to) {
+        return apply_move(mode.session_, from, to);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_sell_t, SinglePlayerMode &mode,
+                                 Coord at) {
+        return apply_sell(mode.session_, at);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_equip_t, SinglePlayerMode &mode,
+                                 Coord at, std::size_t pool_index) {
+        return apply_equip(mode.session_, at, pool_index);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_buy_t, SinglePlayerMode &mode,
+                                 int slot) {
+        return apply_buy(mode.session_, slot);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_refresh_t, SinglePlayerMode &mode) {
+        return apply_refresh(mode.session_);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_freeze_t, SinglePlayerMode &mode) {
+        return apply_freeze(mode.session_);
+    }
+
+    friend ModeUpdate tag_invoke(__tag::act_level_t, SinglePlayerMode &mode) {
+        return apply_level(mode.session_);
+    }
+
   private:
     static ModeUpdate settle_combat(SinglePlayerMode &mode) {
         CombatScoreUpdate score = settle_combat_score(

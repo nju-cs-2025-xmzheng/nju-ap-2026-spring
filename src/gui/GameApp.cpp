@@ -1276,25 +1276,8 @@ void GameApp::HandleInputs() {
         is_dragging_ = false;
         Vector2 mouse_pos = GetMousePosition();
         if (mouse_pos.y >= 500) {
-            auto src_u = get_unit(engine::session(mode_).board_, drag_source_);
-            if (src_u) {
-                auto &stats = unit::stats(*src_u);
-                int price =
-                    (stats.level == 1)
-                        ? 2
-                        : ((stats.level == 2) ? 5
-                                              : ((stats.level == 3) ? 14 : 42));
-                engine::session(mode_).player_.gold += price;
-
-                if (!std::holds_alternative<std::monostate>(stats.equipped)) {
-                    engine::session(mode_).equip_pool_.push_back(
-                        stats.equipped);
-                }
-
-                remove_unit(engine::session(mode_).board_, drag_source_);
-                status_msg_ =
-                    "Sold unit for " + std::to_string(price) + " Gold.";
-                status_msg_timer_ = 2.0f;
+            if (get_unit(engine::session(mode_).board_, drag_source_)) {
+                ApplyModeUpdate(engine::act_sell(mode_, drag_source_));
                 if (has_selection_ && selected_coord_ == drag_source_) {
                     has_selection_ = false;
                 }
@@ -1305,69 +1288,21 @@ void GameApp::HandleInputs() {
         if (!over_ui) {
             auto [drop_cell, drop_found] = GetCellUnderMouse();
             if (drop_found && !(drag_source_ == drop_cell)) {
-                bool valid = true;
-                if (std::holds_alternative<engine::HexCoord>(drop_cell)) {
-                    auto hex = std::get<engine::HexCoord>(drop_cell);
-                    if (hex.r < 4) {
-                        valid = false;
-                        status_msg_ =
-                            "Cannot place units on Enemy half (rows 0-3)!";
-                        status_msg_timer_ = 2.5f;
-                    } else {
-                        int board_units = 0;
-                        for (int r = 4; r < config::engine::BOARD_ROWS; ++r) {
-                            for (int c = 0; c < config::engine::BOARD_COLS;
-                                 ++c) {
-                                if (auto u =
-                                        get_unit(engine::session(mode_).board_,
-                                                 engine::HexCoord{r, c})) {
-                                    if (unit::stats(*u).owner ==
-                                        unit::Owner::PlayerCtrl) {
-                                        board_units++;
-                                    }
-                                }
-                            }
-                        }
-                        bool is_moving_to_empty =
-                            !get_unit(engine::session(mode_).board_, drop_cell);
-                        bool is_src_bench =
-                            std::holds_alternative<engine::LinearCoord>(
-                                drag_source_);
-
-                        if (is_src_bench && is_moving_to_empty &&
-                            board_units >=
-                                engine::session(mode_).player_.level) {
-                            valid = false;
-                            status_msg_ = "Board is full! Upgrade level to "
-                                          "deploy more units.";
-                            status_msg_timer_ = 2.5f;
-                        }
+                // Visually snap the dragged slime toward the drop cell; if the
+                // move is rejected, the per-frame board sync pulls it back.
+                auto src_u =
+                    get_unit(engine::session(mode_).board_, drag_source_);
+                if (src_u && slimes_.find(src_u) != slimes_.end()) {
+                    Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
+                    if (ray.direction.y < 0) {
+                        float t = -ray.position.y / ray.direction.y;
+                        Vector3 hit = Vector3Add(
+                            ray.position, Vector3Scale(ray.direction, t));
+                        slimes_[src_u].current_pos = hit;
+                        slimes_[src_u].was_dragged = true;
                     }
                 }
-
-                if (valid) {
-                    auto src_u =
-                        get_unit(engine::session(mode_).board_, drag_source_);
-                    auto dst_u =
-                        get_unit(engine::session(mode_).board_, drop_cell);
-
-                    if (src_u && slimes_.find(src_u) != slimes_.end()) {
-                        Ray ray =
-                            GetScreenToWorldRay(GetMousePosition(), camera_);
-                        if (ray.direction.y < 0) {
-                            float t = -ray.position.y / ray.direction.y;
-                            Vector3 hit = Vector3Add(
-                                ray.position, Vector3Scale(ray.direction, t));
-                            slimes_[src_u].current_pos = hit;
-                            slimes_[src_u].was_dragged = true;
-                        }
-                    }
-
-                    set_unit(engine::session(mode_).board_, drag_source_,
-                             dst_u);
-                    set_unit(engine::session(mode_).board_, drop_cell, src_u);
-                    engine::session(mode_).check_and_merge(drop_cell);
-                }
+                ApplyModeUpdate(engine::act_move(mode_, drag_source_, drop_cell));
             }
         }
     }
@@ -1378,15 +1313,9 @@ void GameApp::HandleInputs() {
             auto u_ptr =
                 get_unit(engine::session(mode_).board_, hovered_coord_);
             if (u_ptr) {
-                bool ok = engine::session(mode_).equip_unit(
-                    hovered_coord_, drag_equip_source_index_);
-                if (ok) {
-                    status_msg_ = "Equipped unit successfully!";
-                    status_msg_timer_ = 1.5f;
-                } else {
-                    status_msg_ = "Failed: unit already has equipment!";
-                    status_msg_timer_ = 1.5f;
-                }
+                ApplyModeUpdate(engine::act_equip(
+                    mode_, hovered_coord_,
+                    static_cast<std::size_t>(drag_equip_source_index_)));
             } else {
                 status_msg_ =
                     "Preparation Phase - Drag and drop units to position them.";
@@ -2010,14 +1939,7 @@ void GameApp::DrawGame2D() {
             // Click check
             if (can_prepare && hover &&
                 IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                bool ok = engine::session(mode_).buy_unit(i);
-                if (!ok) {
-                    status_msg_ = "Insufficient gold or bench slots!";
-                    status_msg_timer_ = 2.0f;
-                } else {
-                    status_msg_ = "Purchased Slime successfully!";
-                    status_msg_timer_ = 1.5f;
-                }
+                ApplyModeUpdate(engine::act_buy(mode_, i));
             }
         } else {
             DrawGameText("EMPTY", x + w / 2 - 25, y + h / 2 - 10, 16, DARKGRAY);
@@ -2052,13 +1974,8 @@ void GameApp::DrawGame2D() {
 
     // 1. Refresh Shop Button
     draw_shop_action("REFRESH (1G)", 536, Color{140, 60, 30, 255},
-                     Color{180, 80, 40, 255}, [&]() {
-                         bool ok = engine::session(mode_).refresh_shop(false);
-                         if (!ok) {
-                             status_msg_ = "Insufficient gold to refresh shop!";
-                             status_msg_timer_ = 2.0f;
-                         }
-                     });
+                     Color{180, 80, 40, 255},
+                     [&]() { ApplyModeUpdate(engine::act_refresh(mode_)); });
 
     // 2. Freeze Shop Button
     std::string freeze_lbl =
@@ -2069,32 +1986,15 @@ void GameApp::DrawGame2D() {
     Color freeze_hover = engine::session(mode_).shop_frozen_
                              ? Color{50, 190, 240, 255}
                              : Color{30, 130, 170, 255};
-    draw_shop_action(freeze_lbl.c_str(), 596, freeze_col, freeze_hover, [&]() {
-        engine::session(mode_).shop_frozen_ =
-            !engine::session(mode_).shop_frozen_;
-        if (engine::session(mode_).shop_frozen_) {
-            status_msg_ = "Shop frozen for the next round!";
-        } else {
-            status_msg_ = "Shop unfrozen.";
-        }
-        status_msg_timer_ = 1.5f;
-    });
+    draw_shop_action(freeze_lbl.c_str(), 596, freeze_col, freeze_hover,
+                     [&]() { ApplyModeUpdate(engine::act_freeze(mode_)); });
 
     // 3. Buy XP / Level (Upgrade) Button
     int lvl_cost = engine::session(mode_).player_.level * 5 + 5;
     std::string level_btn_lbl = "LEVEL UP (" + std::to_string(lvl_cost) + "G)";
     draw_shop_action(level_btn_lbl.c_str(), 656, Color{30, 60, 140, 255},
-                     Color{40, 80, 180, 255}, [&]() {
-                         bool ok = engine::session(mode_).buy_level();
-                         if (!ok) {
-                             status_msg_ = "Insufficient gold to buy level!";
-                             status_msg_timer_ = 2.0f;
-                         } else {
-                             status_msg_ =
-                                 "Upgraded player level successfully!";
-                             status_msg_timer_ = 1.5f;
-                         }
-                     });
+                     Color{40, 80, 180, 255},
+                     [&]() { ApplyModeUpdate(engine::act_level(mode_)); });
 
     // Drag-to-Sell Shop Area Overlay
     if (can_prepare && is_dragging_) {

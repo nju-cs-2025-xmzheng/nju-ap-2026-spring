@@ -148,6 +148,77 @@ class GameSession {
         return true;
     }
 
+    enum class MoveResult { Ok, EnemyHalf, BoardFull, NoOp };
+
+    // Reposition or swap a unit between board cells and bench slots, enforcing
+    // the placement rules (no enemy half, population cap when deploying from the
+    // bench) and triggering 3-star merges. Owns the rules so the GUI and the
+    // host both go through the same logic.
+    MoveResult move_unit(Coord from, Coord to) {
+        if (from == to) {
+            return MoveResult::NoOp;
+        }
+        auto src = get_unit(board_, from);
+        if (!src) {
+            return MoveResult::NoOp;
+        }
+
+        bool to_is_board = std::holds_alternative<HexCoord>(to);
+        if (to_is_board &&
+            std::get<HexCoord>(to).r < config::engine::BOARD_ROWS / 2) {
+            return MoveResult::EnemyHalf;
+        }
+
+        bool deploying_from_bench = std::holds_alternative<LinearCoord>(from) &&
+                                    to_is_board && !get_unit(board_, to);
+        if (deploying_from_bench &&
+            count_player_board_units() >= player_.level) {
+            return MoveResult::BoardFull;
+        }
+
+        auto dst = get_unit(board_, to);
+        set_unit(board_, from, dst);
+        set_unit(board_, to, src);
+        check_and_merge(to);
+        return MoveResult::Ok;
+    }
+
+    // Sell the unit at the given coord: refund gold by star level, return any
+    // worn equipment to the pool, and clear the slot. Returns the refund, or
+    // -1 if there was no unit.
+    int sell_unit(Coord at) {
+        auto unit_ptr = get_unit(board_, at);
+        if (!unit_ptr) {
+            return -1;
+        }
+        auto &stats = unit::stats(*unit_ptr);
+        int price = (stats.level == 1)   ? 2
+                    : (stats.level == 2) ? 5
+                    : (stats.level == 3) ? 14
+                                         : 42;
+        player_.gold += price;
+        if (!std::holds_alternative<std::monostate>(stats.equipped)) {
+            equip_pool_.push_back(stats.equipped);
+        }
+        remove_unit(board_, at);
+        return price;
+    }
+
+    int count_player_board_units() const {
+        int count = 0;
+        for (int r = config::engine::BOARD_ROWS / 2;
+             r < config::engine::BOARD_ROWS; ++r) {
+            for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+                if (auto u_ptr = get_unit(board_, HexCoord{r, c})) {
+                    if (unit::stats(*u_ptr).owner == unit::Owner::PlayerCtrl) {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
     void check_and_merge(
         std::optional<Coord> most_recently_acquired = std::nullopt) {
         std::map<std::pair<unit::Element, int>, std::vector<Coord>> groups;

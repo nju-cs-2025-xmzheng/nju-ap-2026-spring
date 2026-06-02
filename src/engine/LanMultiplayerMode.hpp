@@ -17,6 +17,7 @@ class LanMultiplayerMode {
     Board local_ready_board_;
     Board remote_ready_board_;
     bool connected_ = false;
+    bool reconnecting_ = false;
     bool waiting_for_peer_ = false;
     bool local_ready_ = false;
     bool remote_ready_ = false;
@@ -42,6 +43,7 @@ class LanMultiplayerMode {
         remote_ready_board_ = Board{};
         init_board(remote_ready_board_);
         connected_ = network::is_connected(connection_);
+        reconnecting_ = false;
         waiting_for_peer_ = false;
         local_ready_ = false;
         remote_ready_ = false;
@@ -291,10 +293,14 @@ class LanMultiplayerMode {
         return update;
     }
 
-  private:
+    // Exposed for testing the reconnection state machine without a live
+    // socket; normally driven by poll_mode.
     ModeUpdate handle_event(const network::Event &event) {
         switch (event.type) {
         case network::EventType::Connected:
+            if (reconnecting_) {
+                return on_reconnected();
+            }
             connected_ = true;
             waiting_for_peer_ = false;
             return {kind_ == ModeKind::LanHost
@@ -306,18 +312,12 @@ class LanMultiplayerMode {
                     false,
                     false};
         case network::EventType::Disconnected:
-            connected_ = false;
-            local_ready_ = false;
-            remote_ready_ = false;
-            waiting_for_peer_ = false;
-            return {"Multiplayer connection closed.",
-                    3.0f,
-                    false,
-                    false,
-                    false,
-                    false};
+            return on_disconnected();
         case network::EventType::Error:
             connected_ = false;
+            reconnecting_ = false;
+            local_ready_ = false;
+            remote_ready_ = false;
             waiting_for_peer_ = false;
             return {"Network error: " + event.text,
                     4.0f,
@@ -330,6 +330,59 @@ class LanMultiplayerMode {
         }
         return {};
     }
+
+    // A peer dropped unexpectedly. Keep the in-progress game state intact and
+    // ask the connection to re-establish itself; only give up if there is
+    // nothing left to reconnect to.
+    ModeUpdate on_disconnected() {
+        connected_ = false;
+        waiting_for_peer_ = false;
+        if (network::reconnect(connection_)) {
+            reconnecting_ = true;
+            return {"Connection lost. Reconnecting...",
+                    4.0f,
+                    false,
+                    false,
+                    false,
+                    false};
+        }
+        reconnecting_ = false;
+        local_ready_ = false;
+        remote_ready_ = false;
+        return {"Multiplayer connection closed.",
+                3.0f,
+                false,
+                false,
+                false,
+                false};
+    }
+
+    // The dropped connection came back. The host is the authority, so it
+    // replays the current state to bring the freshly reconnected peer back in
+    // sync; the client simply waits for that replay.
+    ModeUpdate on_reconnected() {
+        connected_ = true;
+        reconnecting_ = false;
+        waiting_for_peer_ = false;
+        if (kind_ == ModeKind::LanHost) {
+            if (is_combat_ && result_announced_) {
+                send_result();
+            } else if (is_combat_) {
+                send_snapshot();
+            } else if (local_ready_) {
+                send_board("READY " + std::to_string(session_.player_.hp),
+                           local_ready_board_);
+            }
+        }
+        return {"Reconnected. Resuming game.",
+                3.0f,
+                false,
+                false,
+                false,
+                false};
+    }
+
+  private:
 
     ModeUpdate handle_message(const std::string &message) {
         std::istringstream in(message);

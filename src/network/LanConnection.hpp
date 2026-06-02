@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <boost/asio.hpp>
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -21,6 +22,7 @@ struct join_host_t {};
 struct poll_event_t {};
 struct send_text_t {};
 struct is_connected_t {};
+struct reconnect_t {};
 struct shutdown_t {};
 } // namespace __tag
 
@@ -77,6 +79,16 @@ struct is_connected_fn {
     }
 };
 
+struct reconnect_fn {
+    template <typename C>
+    auto operator()(C &&conn) const
+        noexcept(noexcept(tag_invoke(__tag::reconnect_t{},
+                                     std::forward<C>(conn))))
+            -> decltype(auto) {
+        return tag_invoke(__tag::reconnect_t{}, std::forward<C>(conn));
+    }
+};
+
 struct shutdown_fn {
     template <typename C>
     auto operator()(C &&conn) const
@@ -93,6 +105,7 @@ inline constexpr __fn::join_host_fn join_host{};
 inline constexpr __fn::poll_event_fn poll_event{};
 inline constexpr __fn::send_text_fn send_text{};
 inline constexpr __fn::is_connected_fn is_connected{};
+inline constexpr __fn::reconnect_fn reconnect{};
 inline constexpr __fn::shutdown_fn shutdown{};
 
 enum class EventType { Connected, Disconnected, Message, Error };
@@ -104,7 +117,7 @@ struct Event {
 
 class LanConnection {
   public:
-    LanConnection() : socket_(io_), acceptor_(io_) {}
+    LanConnection() : socket_(io_), acceptor_(io_), reconnect_timer_(io_) {}
 
     ~LanConnection() { shutdown(*this); }
 
@@ -114,6 +127,8 @@ class LanConnection {
     friend bool tag_invoke(__tag::start_host_t, LanConnection &conn,
                            std::uint16_t port) {
         conn.reset();
+        conn.role_ = Role::Host;
+        conn.port_ = port;
         boost::system::error_code ec;
         boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(),
                                                 port);
@@ -132,48 +147,19 @@ class LanConnection {
         if (ec)
             return conn.fail("listen: " + ec.message());
 
-        conn.acceptor_.async_accept(
-            conn.socket_, [&conn](boost::system::error_code accept_ec) {
-                if (accept_ec) {
-                    conn.fail("accept: " + accept_ec.message());
-                    return;
-                }
-                conn.connected_ = true;
-                conn.push_event({EventType::Connected, ""});
-                conn.read_header();
-            });
         conn.run();
+        conn.arm_accept();
         return true;
     }
 
     friend bool tag_invoke(__tag::join_host_t, LanConnection &conn,
                            const std::string &host, std::uint16_t port) {
         conn.reset();
-        auto resolver =
-            std::make_shared<boost::asio::ip::tcp::resolver>(conn.io_);
-        resolver->async_resolve(
-            host, std::to_string(port),
-            [&conn,
-             resolver](boost::system::error_code resolve_ec,
-                       boost::asio::ip::tcp::resolver::results_type endpoints) {
-                if (resolve_ec) {
-                    conn.fail("resolve: " + resolve_ec.message());
-                    return;
-                }
-                boost::asio::async_connect(
-                    conn.socket_, endpoints,
-                    [&conn](boost::system::error_code connect_ec,
-                            const boost::asio::ip::tcp::endpoint &) {
-                        if (connect_ec) {
-                            conn.fail("connect: " + connect_ec.message());
-                            return;
-                        }
-                        conn.connected_ = true;
-                        conn.push_event({EventType::Connected, ""});
-                        conn.read_header();
-                    });
-            });
+        conn.role_ = Role::Client;
+        conn.remote_host_ = host;
+        conn.port_ = port;
         conn.run();
+        boost::asio::post(conn.io_, [&conn] { conn.attempt_connect(); });
         return true;
     }
 
@@ -201,19 +187,44 @@ class LanConnection {
         return conn.connected_.load();
     }
 
+    // Attempt to re-establish a dropped connection while preserving the
+    // existing io thread and (for a host) the listening acceptor. Returns
+    // false when there is nothing to reconnect (no prior role, already
+    // connected, or the connection was deliberately shut down).
+    friend bool tag_invoke(__tag::reconnect_t, LanConnection &conn) {
+        if (conn.connected_.load()) {
+            return true;
+        }
+        if (conn.role_ == Role::None || !conn.thread_.joinable()) {
+            return false;
+        }
+        conn.reconnect_attempts_ = 0;
+        if (conn.role_ == Role::Host) {
+            conn.arm_accept();
+        } else {
+            boost::asio::post(conn.io_, [&conn] { conn.attempt_connect(); });
+        }
+        return true;
+    }
+
     friend void tag_invoke(__tag::shutdown_t, LanConnection &conn) {
         conn.connected_ = false;
         boost::system::error_code ec;
+        conn.reconnect_timer_.cancel();
         conn.socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
         conn.socket_.close(ec);
         conn.acceptor_.close(ec);
+        conn.work_guard_.reset();
         conn.io_.stop();
         if (conn.thread_.joinable()) {
             conn.thread_.join();
         }
+        conn.role_ = Role::None;
     }
 
   private:
+    enum class Role { None, Host, Client };
+
     void reset() {
         shutdown(*this);
         io_.restart();
@@ -225,10 +236,89 @@ class LanConnection {
             write_queue_.clear();
         }
         connected_ = false;
+        role_ = Role::None;
+        reconnect_attempts_ = 0;
     }
 
     void run() {
+        work_guard_.emplace(boost::asio::make_work_guard(io_));
         thread_ = std::thread([this] { io_.run(); });
+    }
+
+    // Listen for a (re)connecting peer on the existing acceptor. Posted onto
+    // the io thread so the socket is only touched from there.
+    void arm_accept() {
+        boost::asio::post(io_, [this] {
+            boost::system::error_code ec;
+            socket_.close(ec);
+            socket_ = boost::asio::ip::tcp::socket(io_);
+            {
+                std::scoped_lock lock(mutex_);
+                write_queue_.clear();
+            }
+            acceptor_.async_accept(
+                socket_, [this](boost::system::error_code accept_ec) {
+                    if (accept_ec) {
+                        fail("accept: " + accept_ec.message());
+                        return;
+                    }
+                    connected_ = true;
+                    push_event({EventType::Connected, ""});
+                    read_header();
+                });
+        });
+    }
+
+    // Resolve and connect to the stored host/port. On failure the attempt is
+    // retried with a fixed backoff until it succeeds or the attempt budget is
+    // exhausted. Always runs on the io thread.
+    void attempt_connect() {
+        boost::system::error_code ec;
+        socket_.close(ec);
+        socket_ = boost::asio::ip::tcp::socket(io_);
+        {
+            std::scoped_lock lock(mutex_);
+            write_queue_.clear();
+        }
+        auto resolver = std::make_shared<boost::asio::ip::tcp::resolver>(io_);
+        resolver->async_resolve(
+            remote_host_, std::to_string(port_),
+            [this,
+             resolver](boost::system::error_code resolve_ec,
+                       boost::asio::ip::tcp::resolver::results_type endpoints) {
+                if (resolve_ec) {
+                    schedule_retry("resolve: " + resolve_ec.message());
+                    return;
+                }
+                boost::asio::async_connect(
+                    socket_, endpoints,
+                    [this](boost::system::error_code connect_ec,
+                           const boost::asio::ip::tcp::endpoint &) {
+                        if (connect_ec) {
+                            schedule_retry("connect: " + connect_ec.message());
+                            return;
+                        }
+                        connected_ = true;
+                        reconnect_attempts_ = 0;
+                        push_event({EventType::Connected, ""});
+                        read_header();
+                    });
+            });
+    }
+
+    void schedule_retry(std::string reason) {
+        if (++reconnect_attempts_ > max_reconnect_attempts_) {
+            fail("connection failed: " + std::move(reason));
+            return;
+        }
+        reconnect_timer_.expires_after(
+            std::chrono::milliseconds(reconnect_delay_ms_));
+        reconnect_timer_.async_wait([this](boost::system::error_code timer_ec) {
+            if (timer_ec) {
+                return; // cancelled by shutdown
+            }
+            attempt_connect();
+        });
     }
 
     bool fail(std::string message) {
@@ -322,10 +412,16 @@ class LanConnection {
 
   private:
     static constexpr std::uint32_t max_message_size_ = 1024 * 1024;
+    static constexpr int reconnect_delay_ms_ = 200;
+    static constexpr int max_reconnect_attempts_ = 50;
 
     boost::asio::io_context io_;
     boost::asio::ip::tcp::socket socket_;
     boost::asio::ip::tcp::acceptor acceptor_;
+    boost::asio::steady_timer reconnect_timer_;
+    std::optional<boost::asio::executor_work_guard<
+        boost::asio::io_context::executor_type>>
+        work_guard_;
     std::thread thread_;
     std::mutex mutex_;
     std::deque<Event> events_;
@@ -333,6 +429,10 @@ class LanConnection {
     std::array<unsigned char, 4> read_header_{};
     std::string read_body_;
     std::atomic_bool connected_ = false;
+    Role role_ = Role::None;
+    std::string remote_host_;
+    std::uint16_t port_ = 0;
+    int reconnect_attempts_ = 0;
 };
 
 } // namespace Synera::network

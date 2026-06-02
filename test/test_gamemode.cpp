@@ -226,6 +226,54 @@ static void test_multiplayer_keeps_early_remote_ready_after_ack() {
     assert(!mode.remote_ready_);
 }
 
+static void test_multiplayer_initial_connect_enters_gameplay() {
+    LanMultiplayerMode mode;
+    mode.kind_ = ModeKind::LanClient;
+
+    auto update = mode.handle_event({network::EventType::Connected, ""});
+    assert(mode.connected_);
+    assert(!mode.reconnecting_);
+    assert(update.enter_gameplay);
+    assert(update.clear_visuals);
+}
+
+static void test_multiplayer_disconnect_without_link_closes() {
+    LanMultiplayerMode mode;
+    mode.kind_ = ModeKind::LanClient;
+    mode.connected_ = true;
+    mode.local_ready_ = true;
+
+    auto update = mode.handle_event({network::EventType::Disconnected, "drop"});
+    assert(!mode.connected_);
+    assert(!mode.reconnecting_);
+    assert(!mode.local_ready_);
+    assert(update.status == "Multiplayer connection closed.");
+}
+
+static void test_multiplayer_disconnect_begins_reconnect_and_resumes() {
+    LanMultiplayerMode mode;
+    mode.kind_ = ModeKind::LanHost;
+    // A live host listener is what makes reconnection possible.
+    assert(network::start_host(mode.connection_, 39401));
+    mode.connected_ = true;
+    mode.is_combat_ = true;
+
+    auto lost = mode.handle_event({network::EventType::Disconnected, "drop"});
+    assert(!mode.connected_);
+    assert(mode.reconnecting_);
+    assert(mode.is_combat_); // in-progress combat is preserved
+    assert(lost.status == "Connection lost. Reconnecting...");
+
+    auto resumed = mode.handle_event({network::EventType::Connected, ""});
+    assert(mode.connected_);
+    assert(!mode.reconnecting_);
+    assert(mode.is_combat_);
+    assert(!resumed.enter_gameplay); // resume, not a brand-new game
+    assert(resumed.status == "Reconnected. Resuming game.");
+
+    network::shutdown(mode.connection_);
+}
+
 int main() {
     std::cout << "Running test_gamemode..." << std::endl;
     test_round_20_victory_settlement();
@@ -237,6 +285,9 @@ int main() {
     test_multiplayer_draw_scores_and_damages_evenly();
     test_multiplayer_draw_double_ko_enters_draw_settlement();
     test_multiplayer_keeps_early_remote_ready_after_ack();
+    test_multiplayer_initial_connect_enters_gameplay();
+    test_multiplayer_disconnect_without_link_closes();
+    test_multiplayer_disconnect_begins_reconnect_and_resumes();
     std::cout << "test_gamemode passed!" << std::endl;
     return 0;
 }

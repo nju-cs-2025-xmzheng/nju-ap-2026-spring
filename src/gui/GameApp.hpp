@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/GameModeController.hpp"
+#include "gui/InputBox.hpp"
 #include "raylib.h"
 #include "unit/UnitImpl.hpp" // IWYU pragma: keep
 #include <map>
@@ -145,9 +146,8 @@ class GameApp {
     bool is_saving_mode_ = false;
     bool exit_flag_ = false;
     float menu_transition_cooldown_ = 0.0f;
-    std::string multiplayer_address_;
+    InputBox multiplayer_address_input_;
     std::string multiplayer_status_;
-    bool editing_multiplayer_address_ = false;
     MultiplayerMenuState multiplayer_menu_state_ = MultiplayerMenuState::Setup;
 };
 

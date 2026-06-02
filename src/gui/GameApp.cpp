@@ -192,6 +192,32 @@ GameApp::GameApp() {
         SetTextureFilter(font_bold_.texture, TEXTURE_FILTER_BILINEAR);
     }
 
+    // Initialize Multiplayer Address InputBox
+    InputBoxStyle input_style;
+    input_style.font = font_regular_;
+    input_style.fontSize = 16.0f;
+    input_style.fontSpacing = 1.0f;
+    input_style.paddingLeft = 14.0f;
+    input_style.paddingRight = 14.0f;
+    input_style.paddingTop = 12.0f;
+    input_style.paddingBottom = 12.0f;
+    input_style.borderWidth = 1.0f;
+    input_style.borderRadius = 0.0f;
+    input_style.bgNormal = Color{28, 28, 34, 255};
+    input_style.bgHover = Color{28, 28, 34, 255};
+    input_style.bgActive = Color{42, 48, 64, 255};
+    input_style.borderNormal = Color{110, 110, 120, 255};
+    input_style.borderHover = GOLD;
+    input_style.borderActive = GOLD;
+    input_style.textNormal = WHITE;
+    input_style.textPlaceholder = Color{150, 150, 160, 255};
+    input_style.cursorColor = GOLD;
+
+    multiplayer_address_input_ =
+        InputBox(MultiplayerAddressBounds(), kDefaultMultiplayerAddress)
+            .SetStyle(input_style)
+            .SetCharValidator(IsMultiplayerAddressChar);
+
     // 4.5. Load custom alpha-discard shader with directional lighting to
     // prevent black backgrounds on transparent textures and add depth/shading
     const char *alphaVs = R"(
@@ -300,7 +326,7 @@ void GameApp::ApplyModeUpdate(const engine::ModeUpdate &update) {
         game_in_progress_ = true;
         multiplayer_menu_state_ = MultiplayerMenuState::Setup;
         multiplayer_status_.clear();
-        editing_multiplayer_address_ = false;
+        multiplayer_address_input_.SetFocused(false);
         state_ = GameState::Gameplay;
     }
     if (update.enter_settlement) {
@@ -922,8 +948,7 @@ void GameApp::DrawMainMenu() {
         }
 
         // Button 2: Multiplayer or Exit Game
-        const char *btn2_text =
-            game_in_progress_ ? "Exit Game" : "Multiplayer";
+        const char *btn2_text = game_in_progress_ ? "Exit Game" : "Multiplayer";
         bool btn2_enabled = true;
         if (draw_menu_btn(btn2_text, 280, btn2_enabled)) {
             if (game_in_progress_) {
@@ -932,7 +957,7 @@ void GameApp::DrawMainMenu() {
             } else {
                 multiplayer_menu_state_ = MultiplayerMenuState::Setup;
                 multiplayer_status_.clear();
-                editing_multiplayer_address_ = false;
+                multiplayer_address_input_.SetFocused(false);
                 state_ = GameState::MultiplayerMenu;
                 menu_transition_cooldown_ = 0.2f;
             }
@@ -965,7 +990,7 @@ void GameApp::UpdateMultiplayerMenu() {
         ApplyModeUpdate(engine::leave_game(mode_));
         multiplayer_menu_state_ = MultiplayerMenuState::Setup;
         multiplayer_status_.clear();
-        editing_multiplayer_address_ = false;
+        multiplayer_address_input_.SetFocused(false);
         state_ = GameState::MultiplayerMenu;
         menu_transition_cooldown_ = 0.2f;
     };
@@ -974,7 +999,7 @@ void GameApp::UpdateMultiplayerMenu() {
         ApplyModeUpdate(engine::leave_game(mode_));
         multiplayer_menu_state_ = MultiplayerMenuState::Setup;
         multiplayer_status_.clear();
-        editing_multiplayer_address_ = false;
+        multiplayer_address_input_.SetFocused(false);
         state_ = GameState::MainMenu;
         menu_transition_cooldown_ = 0.2f;
     };
@@ -986,32 +1011,8 @@ void GameApp::UpdateMultiplayerMenu() {
         return;
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        editing_multiplayer_address_ =
-            CheckCollisionPointRec(GetMousePosition(), address_bounds);
-    }
+    multiplayer_address_input_.Update();
 
-    auto append_address_chars = [](std::string &text) {
-        int key = GetCharPressed();
-        while (key > 0) {
-            char ch = static_cast<char>(key);
-            if (IsMultiplayerAddressChar(ch) && text.size() < 72u) {
-                text.push_back(ch);
-            }
-            key = GetCharPressed();
-        }
-        if (IsKeyPressed(KEY_BACKSPACE) && !text.empty()) {
-            text.pop_back();
-        }
-        if (IsKeyPressed(KEY_ENTER)) {
-            text = text.empty() ? "" : FormatMultiplayerAddress(
-                                          ParseMultiplayerAddress(text));
-        }
-    };
-
-    if (editing_multiplayer_address_) {
-        append_address_chars(multiplayer_address_);
-    }
     if (IsKeyPressed(KEY_ESCAPE)) {
         leave_multiplayer_menu();
     }
@@ -1030,10 +1031,10 @@ void GameApp::DrawMultiplayerMenu() {
         bool hover = enabled && CheckCollisionPointRec(
                                     GetMousePosition(),
                                     {(float)x, (float)y, (float)w, (float)h});
-        DrawRectangle(x, y, w, h,
-                      enabled ? (hover ? Color{50, 60, 90, 255}
-                                       : Color{30, 30, 38, 255})
-                              : Color{35, 35, 40, 255});
+        DrawRectangle(
+            x, y, w, h,
+            enabled ? (hover ? Color{50, 60, 90, 255} : Color{30, 30, 38, 255})
+                    : Color{35, 35, 40, 255});
         DrawRectangleLines(x, y, w, h,
                            enabled ? (hover ? GOLD : GRAY) : DARKGRAY);
         int text_w = MeasureGameText(text, 18, true);
@@ -1047,7 +1048,7 @@ void GameApp::DrawMultiplayerMenu() {
         ApplyModeUpdate(engine::leave_game(mode_));
         multiplayer_menu_state_ = MultiplayerMenuState::Setup;
         multiplayer_status_.clear();
-        editing_multiplayer_address_ = false;
+        multiplayer_address_input_.SetFocused(false);
         state_ = GameState::MainMenu;
         menu_transition_cooldown_ = 0.2f;
     };
@@ -1056,59 +1057,20 @@ void GameApp::DrawMultiplayerMenu() {
         ApplyModeUpdate(engine::leave_game(mode_));
         multiplayer_menu_state_ = MultiplayerMenuState::Setup;
         multiplayer_status_.clear();
-        editing_multiplayer_address_ = false;
+        multiplayer_address_input_.SetFocused(false);
         state_ = GameState::MultiplayerMenu;
         menu_transition_cooldown_ = 0.2f;
     };
 
-    auto draw_address_field = [&](bool read_only) {
-        Rectangle bounds = MultiplayerAddressBounds();
-        int x = (int)bounds.x;
-        int y = (int)bounds.y;
-        int w = (int)bounds.width;
-        int h = (int)bounds.height;
-        bool hover = !read_only && CheckCollisionPointRec(GetMousePosition(),
-                                                          bounds);
-        bool active = !read_only && editing_multiplayer_address_;
-        DrawGameText("Address", x, y - 30, 18, LIGHTGRAY, false);
-        DrawRectangle(x, y, w, h,
-                      read_only       ? Color{24, 24, 30, 230}
-                      : active        ? Color{42, 48, 64, 255}
-                                      : Color{28, 28, 34, 255});
-        DrawRectangleLinesEx(
-            bounds, active || hover ? 2.0f : 1.0f,
-            active || hover ? GOLD : Color{110, 110, 120, 255});
-
-        bool placeholder = multiplayer_address_.empty();
-        std::string shown = read_only
-                                ? FormatMultiplayerAddress(
-                                      ParseMultiplayerAddress(
-                                          multiplayer_address_))
-                                : (placeholder ? kDefaultMultiplayerAddress
-                                               : multiplayer_address_);
-        int text_max_width = w - 28;
-        while (!shown.empty() &&
-               MeasureGameText(shown.c_str(), 16, false) > text_max_width) {
-            shown.erase(shown.begin());
-        }
-        Color text_color = read_only
-                               ? Color{205, 205, 215, 255}
-                               : (placeholder ? Color{150, 150, 160, 255}
-                                              : WHITE);
-        DrawGameText(shown.c_str(), x + 14, y + 12, 16, text_color, false);
-
-        if (active) {
-            int cursor_x =
-                x + 14 + MeasureGameText(shown.c_str(), 16, false) + 2;
-            if (((int)(GetTime() * 2.0) % 2) == 0 && cursor_x < x + w - 10) {
-                DrawRectangle(cursor_x, y + 10, 2, h - 20, GOLD);
-            }
-        }
-    };
-
     bool connection_screen =
         multiplayer_menu_state_ != MultiplayerMenuState::Setup;
-    draw_address_field(connection_screen);
+
+    // Draw address field using InputBox
+    Rectangle addr_bounds = MultiplayerAddressBounds();
+    DrawGameText("Address", (int)addr_bounds.x, (int)addr_bounds.y - 30, 18,
+                 LIGHTGRAY, false);
+    multiplayer_address_input_.SetReadOnly(connection_screen);
+    multiplayer_address_input_.Draw();
 
     auto draw_connection_status = [&]() {
         std::string text =
@@ -1124,10 +1086,10 @@ void GameApp::DrawMultiplayerMenu() {
             text.pop_back();
         }
 
-        Color color = text.starts_with("Failed") ||
-                              text.starts_with("Network error")
-                          ? Color{255, 120, 120, 255}
-                          : LIGHTGRAY;
+        Color color =
+            text.starts_with("Failed") || text.starts_with("Network error")
+                ? Color{255, 120, 120, 255}
+                : LIGHTGRAY;
         int text_w = MeasureGameText(text.c_str(), font_size, true);
         DrawGameText(text.c_str(), 640 - text_w / 2, 300, font_size, color,
                      true);
@@ -1143,27 +1105,25 @@ void GameApp::DrawMultiplayerMenu() {
     }
 
     if (draw_btn("HOST", 430, 315, 195, true)) {
-        engine::ModeUpdate update =
-            engine::host_multiplayer(mode_,
-                                     ParseMultiplayerAddress(
-                                         multiplayer_address_));
+        engine::ModeUpdate update = engine::host_multiplayer(
+            mode_,
+            ParseMultiplayerAddress(multiplayer_address_input_.GetValue()));
         ApplyModeUpdate(update);
         multiplayer_menu_state_ = MultiplayerMenuState::Hosting;
         multiplayer_status_ = update.status.starts_with("Failed")
                                   ? update.status
                                   : "Waiting... (1/2)";
-        editing_multiplayer_address_ = false;
+        multiplayer_address_input_.SetFocused(false);
     }
     if (draw_btn("JOIN", 655, 315, 195, true)) {
-        engine::ModeUpdate update =
-            engine::join_multiplayer(mode_,
-                                     ParseMultiplayerAddress(
-                                         multiplayer_address_));
+        engine::ModeUpdate update = engine::join_multiplayer(
+            mode_,
+            ParseMultiplayerAddress(multiplayer_address_input_.GetValue()));
         ApplyModeUpdate(update);
         multiplayer_menu_state_ = MultiplayerMenuState::Joining;
-        multiplayer_status_ = update.status.empty() ? "Joining..."
-                                                    : update.status;
-        editing_multiplayer_address_ = false;
+        multiplayer_status_ =
+            update.status.empty() ? "Joining..." : update.status;
+        multiplayer_address_input_.SetFocused(false);
     }
     if (draw_btn("BACK", 500, 380, 280, true)) {
         leave_multiplayer_menu();
@@ -1284,7 +1244,8 @@ void GameApp::HandleInputs() {
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         if (!over_ui) {
             if (hovered_equip_index_ != -1 &&
-                hovered_equip_index_ < (int)engine::session(mode_).equip_pool_.size()) {
+                hovered_equip_index_ <
+                    (int)engine::session(mode_).equip_pool_.size()) {
                 is_dragging_equip_ = true;
                 drag_equip_source_index_ = hovered_equip_index_;
                 status_msg_ = "Dragging " +
@@ -1326,7 +1287,8 @@ void GameApp::HandleInputs() {
                 engine::session(mode_).player_.gold += price;
 
                 if (!std::holds_alternative<std::monostate>(stats.equipped)) {
-                    engine::session(mode_).equip_pool_.push_back(stats.equipped);
+                    engine::session(mode_).equip_pool_.push_back(
+                        stats.equipped);
                 }
 
                 remove_unit(engine::session(mode_).board_, drag_source_);
@@ -1356,8 +1318,9 @@ void GameApp::HandleInputs() {
                         for (int r = 4; r < config::engine::BOARD_ROWS; ++r) {
                             for (int c = 0; c < config::engine::BOARD_COLS;
                                  ++c) {
-                                if (auto u = get_unit(engine::session(mode_).board_,
-                                                      engine::HexCoord{r, c})) {
+                                if (auto u =
+                                        get_unit(engine::session(mode_).board_,
+                                                 engine::HexCoord{r, c})) {
                                     if (unit::stats(*u).owner ==
                                         unit::Owner::PlayerCtrl) {
                                         board_units++;
@@ -1372,7 +1335,8 @@ void GameApp::HandleInputs() {
                                 drag_source_);
 
                         if (is_src_bench && is_moving_to_empty &&
-                            board_units >= engine::session(mode_).player_.level) {
+                            board_units >=
+                                engine::session(mode_).player_.level) {
                             valid = false;
                             status_msg_ = "Board is full! Upgrade level to "
                                           "deploy more units.";
@@ -1382,8 +1346,10 @@ void GameApp::HandleInputs() {
                 }
 
                 if (valid) {
-                    auto src_u = get_unit(engine::session(mode_).board_, drag_source_);
-                    auto dst_u = get_unit(engine::session(mode_).board_, drop_cell);
+                    auto src_u =
+                        get_unit(engine::session(mode_).board_, drag_source_);
+                    auto dst_u =
+                        get_unit(engine::session(mode_).board_, drop_cell);
 
                     if (src_u && slimes_.find(src_u) != slimes_.end()) {
                         Ray ray =
@@ -1397,7 +1363,8 @@ void GameApp::HandleInputs() {
                         }
                     }
 
-                    set_unit(engine::session(mode_).board_, drag_source_, dst_u);
+                    set_unit(engine::session(mode_).board_, drag_source_,
+                             dst_u);
                     set_unit(engine::session(mode_).board_, drop_cell, src_u);
                     engine::session(mode_).check_and_merge(drop_cell);
                 }
@@ -1408,10 +1375,11 @@ void GameApp::HandleInputs() {
     if (is_dragging_equip_ && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         is_dragging_equip_ = false;
         if (!over_ui && has_hover_) {
-            auto u_ptr = get_unit(engine::session(mode_).board_, hovered_coord_);
+            auto u_ptr =
+                get_unit(engine::session(mode_).board_, hovered_coord_);
             if (u_ptr) {
-                bool ok = engine::session(mode_).equip_unit(hovered_coord_,
-                                              drag_equip_source_index_);
+                bool ok = engine::session(mode_).equip_unit(
+                    hovered_coord_, drag_equip_source_index_);
                 if (ok) {
                     status_msg_ = "Equipped unit successfully!";
                     status_msg_timer_ = 1.5f;
@@ -1850,24 +1818,29 @@ void GameApp::DrawGame2D() {
     float hp_pct = engine::session(mode_).player_.hp / 100.0f;
     DrawRectangle(150, 20, (int)(200 * hp_pct), 20,
                   hp_pct > 0.4f ? GREEN : RED);
-    std::string hp_text = std::to_string(engine::session(mode_).player_.hp) + "/100";
+    std::string hp_text =
+        std::to_string(engine::session(mode_).player_.hp) + "/100";
     DrawGameText(hp_text.c_str(), 220, 22, 18, WHITE);
 
     // Player Gold
     DrawGameText("GOLD:", 400, 20, 22, LIGHTGRAY);
-    std::string gold_text = std::to_string(engine::session(mode_).player_.gold) + " G";
+    std::string gold_text =
+        std::to_string(engine::session(mode_).player_.gold) + " G";
     DrawGameText(gold_text.c_str(), 470, 20, 22, GOLD);
 
     // Player Level
     DrawGameText("LEVEL:", 580, 20, 22, LIGHTGRAY);
-    std::string level_text = std::to_string(engine::session(mode_).player_.level);
+    std::string level_text =
+        std::to_string(engine::session(mode_).player_.level);
     DrawGameText(level_text.c_str(), 660, 20, 22, SKYBLUE);
 
     // Board population count (only count PlayerCtrl units)
     int board_units = 0;
     for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
         for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
-            if (auto u = get_unit(engine::is_combat(mode_) ? engine::active_board(mode_) : engine::session(mode_).board_,
+            if (auto u = get_unit(engine::is_combat(mode_)
+                                      ? engine::active_board(mode_)
+                                      : engine::session(mode_).board_,
                                   engine::HexCoord{r, c})) {
                 if (unit::stats(*u).owner == unit::Owner::PlayerCtrl) {
                     board_units++;
@@ -1875,8 +1848,9 @@ void GameApp::DrawGame2D() {
             }
         }
     }
-    std::string pop_text = "(" + std::to_string(board_units) + "/" +
-                           std::to_string(engine::session(mode_).player_.level) + ")";
+    std::string pop_text =
+        "(" + std::to_string(board_units) + "/" +
+        std::to_string(engine::session(mode_).player_.level) + ")";
     DrawGameText(pop_text.c_str(), 690, 22, 18, LIGHTGRAY);
 
     // Round number
@@ -1920,8 +1894,9 @@ void GameApp::DrawGame2D() {
     DrawRectangleLines(20, 120, 220, 360, Color{40, 40, 50, 255});
     DrawGameText("ACTIVE RESONANCES", 30, 130, 18, GOLD);
 
-    auto active_synergies =
-        unit::compute_synergies(engine::is_combat(mode_) ? engine::active_board(mode_) : engine::session(mode_).board_);
+    auto active_synergies = unit::compute_synergies(
+        engine::is_combat(mode_) ? engine::active_board(mode_)
+                                 : engine::session(mode_).board_);
 
     int sy_y = 170;
     auto draw_synergy_item = [&](const char *name, int count, bool active,
@@ -2066,13 +2041,17 @@ void GameApp::DrawGame2D() {
                      });
 
     // 2. Freeze Shop Button
-    std::string freeze_lbl = engine::session(mode_).shop_frozen_ ? "FROZEN" : "FREEZE SHOP";
-    Color freeze_col = engine::session(mode_).shop_frozen_ ? Color{30, 144, 255, 255}
-                                             : Color{20, 100, 130, 255};
-    Color freeze_hover = engine::session(mode_).shop_frozen_ ? Color{50, 190, 240, 255}
-                                               : Color{30, 130, 170, 255};
+    std::string freeze_lbl =
+        engine::session(mode_).shop_frozen_ ? "FROZEN" : "FREEZE SHOP";
+    Color freeze_col = engine::session(mode_).shop_frozen_
+                           ? Color{30, 144, 255, 255}
+                           : Color{20, 100, 130, 255};
+    Color freeze_hover = engine::session(mode_).shop_frozen_
+                             ? Color{50, 190, 240, 255}
+                             : Color{30, 130, 170, 255};
     draw_shop_action(freeze_lbl.c_str(), 596, freeze_col, freeze_hover, [&]() {
-        engine::session(mode_).shop_frozen_ = !engine::session(mode_).shop_frozen_;
+        engine::session(mode_).shop_frozen_ =
+            !engine::session(mode_).shop_frozen_;
         if (engine::session(mode_).shop_frozen_) {
             status_msg_ = "Shop frozen for the next round!";
         } else {
@@ -2262,9 +2241,10 @@ void GameApp::DrawGame2D() {
                      box_x + box_w / 2 - MeasureGameText(title.c_str(), 28) / 2,
                      box_y + 30, 28, result_color);
 
-        std::string desc = won ? "You cleared the stage. Obtained Gold!"
-                               : (draw ? "Both teams fell at the same time."
-                                       : "Your forces fell. Lost player health!");
+        std::string desc =
+            won ? "You cleared the stage. Obtained Gold!"
+                : (draw ? "Both teams fell at the same time."
+                        : "Your forces fell. Lost player health!");
         if (engine::session(mode_).player_.hp <= 0) {
             desc = "Your health reached 0! GAME OVER!";
         }

@@ -21,6 +21,7 @@ endif()
 add_executable(Synera
     src/main.cpp
     src/gui/GameApp.cpp
+    src/gui/InputBox.cpp
 )
 
 target_include_directories(Synera PRIVATE src ${Boost_INCLUDE_DIRS})

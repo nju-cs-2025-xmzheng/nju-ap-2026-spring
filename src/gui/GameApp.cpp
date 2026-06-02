@@ -1302,7 +1302,8 @@ void GameApp::HandleInputs() {
                         slimes_[src_u].was_dragged = true;
                     }
                 }
-                ApplyModeUpdate(engine::act_move(mode_, drag_source_, drop_cell));
+                ApplyModeUpdate(
+                    engine::act_move(mode_, drag_source_, drop_cell));
             }
         }
     }

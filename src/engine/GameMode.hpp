@@ -271,8 +271,9 @@ struct act_sell_fn {
 struct act_equip_fn {
     template <typename M>
     constexpr auto operator()(M &&mode, Coord at, std::size_t pool_index) const
-        noexcept(noexcept(tag_invoke(__tag::act_equip_t{}, std::forward<M>(mode),
-                                     at, pool_index))) -> decltype(auto) {
+        noexcept(noexcept(tag_invoke(__tag::act_equip_t{},
+                                     std::forward<M>(mode), at, pool_index)))
+            -> decltype(auto) {
         return tag_invoke(__tag::act_equip_t{}, std::forward<M>(mode), at,
                           pool_index);
     }
@@ -291,7 +292,8 @@ struct act_refresh_fn {
     template <typename M>
     constexpr auto operator()(M &&mode) const
         noexcept(noexcept(tag_invoke(__tag::act_refresh_t{},
-                                     std::forward<M>(mode)))) -> decltype(auto) {
+                                     std::forward<M>(mode))))
+            -> decltype(auto) {
         return tag_invoke(__tag::act_refresh_t{}, std::forward<M>(mode));
     }
 };
@@ -300,7 +302,8 @@ struct act_freeze_fn {
     template <typename M>
     constexpr auto operator()(M &&mode) const
         noexcept(noexcept(tag_invoke(__tag::act_freeze_t{},
-                                     std::forward<M>(mode)))) -> decltype(auto) {
+                                     std::forward<M>(mode))))
+            -> decltype(auto) {
         return tag_invoke(__tag::act_freeze_t{}, std::forward<M>(mode));
     }
 };
@@ -309,7 +312,8 @@ struct act_level_fn {
     template <typename M>
     constexpr auto operator()(M &&mode) const
         noexcept(noexcept(tag_invoke(__tag::act_level_t{},
-                                     std::forward<M>(mode)))) -> decltype(auto) {
+                                     std::forward<M>(mode))))
+            -> decltype(auto) {
         return tag_invoke(__tag::act_level_t{}, std::forward<M>(mode));
     }
 };

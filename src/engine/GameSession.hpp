@@ -151,9 +151,9 @@ class GameSession {
     enum class MoveResult { Ok, EnemyHalf, BoardFull, NoOp };
 
     // Reposition or swap a unit between board cells and bench slots, enforcing
-    // the placement rules (no enemy half, population cap when deploying from the
-    // bench) and triggering 3-star merges. Owns the rules so the GUI and the
-    // host both go through the same logic.
+    // the placement rules (no enemy half, population cap when deploying from
+    // the bench) and triggering 3-star merges. Owns the rules so the GUI and
+    // the host both go through the same logic.
     MoveResult move_unit(Coord from, Coord to) {
         if (from == to) {
             return MoveResult::NoOp;

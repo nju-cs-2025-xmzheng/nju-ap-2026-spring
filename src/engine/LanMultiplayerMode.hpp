@@ -248,12 +248,8 @@ class LanMultiplayerMode {
             begin.status_timer = 3.0f;
             return begin;
         }
-        return {"Ready. Waiting for opponent...",
-                3.0f,
-                false,
-                false,
-                false,
-                false};
+        return {
+            "Ready. Waiting for opponent...", 3.0f, false, false, false, false};
     }
 
     friend ModeUpdate tag_invoke(__tag::process_combat_tick_t,
@@ -387,12 +383,8 @@ class LanMultiplayerMode {
         reconnecting_ = false;
         local_ready_ = false;
         remote_ready_ = false;
-        return {"Multiplayer connection closed.",
-                3.0f,
-                false,
-                false,
-                false,
-                false};
+        return {
+            "Multiplayer connection closed.", 3.0f, false, false, false, false};
     }
 
     // The dropped connection came back. The host is the authority, so it
@@ -414,12 +406,8 @@ class LanMultiplayerMode {
                 send_command("PEERREADY");
             }
         }
-        return {"Reconnected. Resuming game.",
-                3.0f,
-                false,
-                false,
-                false,
-                false};
+        return {
+            "Reconnected. Resuming game.", 3.0f, false, false, false, false};
     }
 
     // Preparation actions. The host applies them to its own session_; the
@@ -474,7 +462,8 @@ class LanMultiplayerMode {
         return {};
     }
 
-    friend ModeUpdate tag_invoke(__tag::act_freeze_t, LanMultiplayerMode &mode) {
+    friend ModeUpdate tag_invoke(__tag::act_freeze_t,
+                                 LanMultiplayerMode &mode) {
         if (mode.kind_ == ModeKind::LanHost) {
             return apply_freeze(mode.session_);
         }
@@ -643,10 +632,12 @@ class LanMultiplayerMode {
             int host_hp = 0;
             int client_hp = 0;
             std::istringstream header_in(header);
-            if (!(header_in >> command >> result_text >> host_hp >> client_hp)) {
+            if (!(header_in >> command >> result_text >> host_hp >>
+                  client_hp)) {
                 return {};
             }
-            combat_result_ = invert_result(combat_result_from_string(result_text));
+            combat_result_ =
+                invert_result(combat_result_from_string(result_text));
             if (auto board = deserialize_board_from_string(payload)) {
                 Board client_view = board_to_client_view(*board);
                 apply_board_snapshot_preserving_units(combat_board_,
@@ -665,9 +656,10 @@ class LanMultiplayerMode {
     // The client does not recompute hp/gold (those arrive via STATE); it only
     // decides the result label and whether the game has ended.
     ModeUpdate client_result_settlement(int client_hp, int host_hp) {
-        const char *label = combat_result_ == CombatResult::PlayerWin ? "VICTORY!"
-                            : combat_result_ == CombatResult::EnemyWin ? "DEFEAT!"
-                                                                       : "DRAW!";
+        const char *label =
+            combat_result_ == CombatResult::PlayerWin  ? "VICTORY!"
+            : combat_result_ == CombatResult::EnemyWin ? "DEFEAT!"
+                                                       : "DRAW!";
         ModeUpdate update{label, 3.0f, false, false, false, false};
         bool local_defeated = client_hp <= 0;
         bool opponent_defeated = host_hp <= 0;
@@ -757,9 +749,8 @@ class LanMultiplayerMode {
     }
 
     void send_state() {
-        network::send_text(connection_,
-                           "STATE\n" +
-                               serialize_session_to_string(remote_session_));
+        network::send_text(connection_, "STATE\n" + serialize_session_to_string(
+                                                        remote_session_));
     }
 
     void send_board(const std::string &header, const Board &board) {

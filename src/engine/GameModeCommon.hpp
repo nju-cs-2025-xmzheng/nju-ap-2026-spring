@@ -52,8 +52,9 @@ inline ModeUpdate apply_refresh(GameSession &session) {
 
 inline ModeUpdate apply_freeze(GameSession &session) {
     session.shop_frozen_ = !session.shop_frozen_;
-    return status_update(session.shop_frozen_ ? "Shop frozen for the next round!"
-                                              : "Shop unfrozen.",
+    return status_update(session.shop_frozen_
+                             ? "Shop frozen for the next round!"
+                             : "Shop unfrozen.",
                          1.5f);
 }
 
@@ -65,10 +66,10 @@ inline ModeUpdate apply_level(GameSession &session) {
 
 inline ModeUpdate apply_sell(GameSession &session, Coord at) {
     int price = session.sell_unit(at);
-    return price >= 0 ? status_update(
-                            "Sold unit for " + std::to_string(price) + " Gold.",
-                            2.0f)
-                      : ModeUpdate{};
+    return price >= 0
+               ? status_update(
+                     "Sold unit for " + std::to_string(price) + " Gold.", 2.0f)
+               : ModeUpdate{};
 }
 
 inline ModeUpdate apply_equip(GameSession &session, Coord at,

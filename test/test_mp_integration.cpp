@@ -13,8 +13,7 @@ using namespace std::chrono_literals;
 // elapses, so the asynchronous socket handshake/streaming can complete.
 template <typename Cond>
 static bool pump_until(LanMultiplayerMode &host, LanMultiplayerMode &client,
-                       Cond cond,
-                       std::chrono::milliseconds timeout = 4000ms) {
+                       Cond cond, std::chrono::milliseconds timeout = 4000ms) {
     auto deadline = std::chrono::steady_clock::now() + timeout;
     while (std::chrono::steady_clock::now() < deadline) {
         poll_mode(host);
@@ -37,9 +36,8 @@ static void test_client_command_roundtrip_over_sockets() {
     host_multiplayer(host, ConnectionConfig{"127.0.0.1", 39501});
     join_multiplayer(client, ConnectionConfig{"127.0.0.1", 39501});
 
-    assert(pump_until(host, client, [&] {
-        return host.connected_ && client.connected_;
-    }));
+    assert(pump_until(host, client,
+                      [&] { return host.connected_ && client.connected_; }));
 
     // The host owns the client's authoritative session and its shop.
     assert(host.remote_session_.shop_[0].has_value());

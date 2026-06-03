@@ -134,6 +134,9 @@ class GameApp {
     Font font_regular_;
     Font font_bold_;
 
+    // Elemental icons (indexed by unit::Element value)
+    Texture2D element_icons_[6] = {};
+
     // UI Notification/Status Message
     std::string status_msg_ =
         "Preparation Phase - Drag and drop units to position them.";

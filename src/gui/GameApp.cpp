@@ -275,6 +275,22 @@ GameApp::GameApp() {
         arena_model_ = {0};
     }
 
+    // 6. Load elemental icons (indexed by unit::Element: Anemo, Geo, Electro,
+    // Cryo, Pyro, Hydro)
+    const char *icon_names[6] = {"Anemo", "Geo",  "Electro",
+                                 "Cryo",  "Pyro", "Hydro"};
+    for (int i = 0; i < 6; ++i) {
+        std::string base =
+            std::string("assets/elements/Element_") + icon_names[i] + "_White";
+        std::string path = base + ".png";
+        if (!FileExists(path.c_str()))
+            path = std::string("../") + path;
+        if (FileExists(path.c_str())) {
+            element_icons_[i] = LoadTexture(path.c_str());
+            SetTextureFilter(element_icons_[i], TEXTURE_FILTER_BILINEAR);
+        }
+    }
+
     // Set texture filter to POINT for pixelated/voxel look and apply alpha
     // discard shader
     if (arena_model_.meshCount > 0 && arena_model_.materials != nullptr) {
@@ -299,6 +315,10 @@ GameApp::~GameApp() {
     UnloadShader(alpha_shader_);
     UnloadFont(font_regular_);
     UnloadFont(font_bold_);
+    for (auto &icon : element_icons_) {
+        if (icon.id != 0)
+            UnloadTexture(icon);
+    }
     CloseWindow();
 }
 
@@ -1384,17 +1404,11 @@ void GameApp::DrawGame3D() {
                 (r >= 4) ? Color{50, 110, 80, 255}
                          : Color{110, 50, 50, 255}; // Player area vs Enemy area
 
-            // Highlight if hovered or selected
+            // Highlight if hovered
             bool highlight = false;
             if (has_hover_ &&
                 std::holds_alternative<engine::HexCoord>(hovered_coord_)) {
                 auto hex = std::get<engine::HexCoord>(hovered_coord_);
-                if (hex.r == r && hex.c == c)
-                    highlight = true;
-            }
-            if (has_selection_ &&
-                std::holds_alternative<engine::HexCoord>(selected_coord_)) {
-                auto hex = std::get<engine::HexCoord>(selected_coord_);
                 if (hex.r == r && hex.c == c)
                     highlight = true;
             }
@@ -1411,12 +1425,6 @@ void GameApp::DrawGame3D() {
             if (has_hover_ &&
                 std::holds_alternative<engine::LinearCoord>(hovered_coord_)) {
                 auto linear = std::get<engine::LinearCoord>(hovered_coord_);
-                if (linear.x == i)
-                    highlight = true;
-            }
-            if (has_selection_ &&
-                std::holds_alternative<engine::LinearCoord>(selected_coord_)) {
-                auto linear = std::get<engine::LinearCoord>(selected_coord_);
                 if (linear.x == i)
                     highlight = true;
             }
@@ -1839,46 +1847,71 @@ void GameApp::DrawGame2D() {
         DrawGameText(status_msg_.c_str(), 640 - width / 2, 90, 20, GOLD);
     }
 
-    // 3. Draw Active Synergies list on the left side
-    DrawRectangle(20, 120, 220, 360, Color{16, 16, 20, 200});
-    DrawRectangleLines(20, 120, 220, 360, Color{40, 40, 50, 255});
-    DrawGameText("ACTIVE RESONANCES", 30, 130, 18, GOLD);
-
+    // 3. Draw Active Synergies as circular elemental icons with ring progress
     auto active_synergies = unit::compute_synergies(
         engine::is_combat(mode_) ? engine::active_board(mode_)
                                  : engine::session(mode_).board_);
 
-    int sy_y = 170;
-    auto draw_synergy_item = [&](const char *name, int count, bool active,
-                                 Color col) {
-        std::string text = std::string(name) + ": " + std::to_string(count);
-        DrawGameText(text.c_str(), 35, sy_y, 16, active ? col : DARKGRAY);
+    // Vertical column of circular icons on the left edge
+    float sy_y = 150.0f;
+    auto draw_synergy_item = [&](unit::Element elem, int count, int threshold,
+                                 bool active, Color col) {
+        Vector2 center{44.0f, sy_y + 22.0f};
+        const float outer = 20.0f;
+        const float inner = 17.0f;
+
+        float progress = threshold > 0
+                             ? std::min(1.0f, (float)count / (float)threshold)
+                             : 0.0f;
+
+        // Soft outer glow when active
         if (active)
-            DrawRectangle(180, sy_y + 2, 40, 12, col);
-        sy_y += 24;
+            DrawCircleGradient((int)center.x, (int)center.y, outer + 6.0f,
+                               Fade(col, 0.35f), Fade(col, 0.0f));
+
+        // Inner disc background
+        DrawCircle((int)center.x, (int)center.y, outer,
+                   active ? Fade(col, 0.30f) : Color{24, 24, 30, 230});
+
+        // Background track ring (full circle)
+        DrawRing(center, inner, outer, 0.0f, 360.0f, 64,
+                 Color{38, 38, 46, 255});
+
+        // Progress ring, filling clockwise from the top
+        if (progress > 0.0f)
+            DrawRing(center, inner, outer, -90.0f, -90.0f + 360.0f * progress,
+                     64, active ? col : Fade(col, 0.5f));
+
+        // Elemental icon, tinted by state
+        Texture2D icon = element_icons_[(int)elem];
+        if (icon.id != 0) {
+            float icon_sz = inner * 1.5f;
+            Rectangle src{0, 0, (float)icon.width, (float)icon.height};
+            Rectangle dst{center.x - icon_sz / 2.0f, center.y - icon_sz / 2.0f,
+                          icon_sz, icon_sz};
+            Color tint = active ? WHITE : Color{120, 120, 132, 220};
+            DrawTexturePro(icon, src, dst, {0, 0}, 0.0f, tint);
+        }
+
+        sy_y += 52.0f;
     };
 
-    draw_synergy_item("Pyro (ATK +25%)", active_synergies.pyro_count,
-                      active_synergies.fervent_flames, RED);
-    draw_synergy_item("Hydro (HP +25%)", active_synergies.hydro_count,
-                      active_synergies.soothing_water, BLUE);
-    draw_synergy_item("Anemo (Mana -15)", active_synergies.anemo_count,
-                      active_synergies.impetuous_winds, SKYBLUE);
-    draw_synergy_item("Geo (Shield +15%)", active_synergies.geo_count,
-                      active_synergies.enduring_rock, GOLD);
-    draw_synergy_item("Electro (Mana+5)", active_synergies.electro_count,
-                      active_synergies.high_voltage, PURPLE);
-    draw_synergy_item("Cryo (Freeze 20%)", active_synergies.cryo_count,
+    draw_synergy_item(unit::Element::Pyro, active_synergies.pyro_count, 2,
+                      active_synergies.fervent_flames,
+                      Color{255, 110, 70, 255});
+    draw_synergy_item(unit::Element::Hydro, active_synergies.hydro_count, 2,
+                      active_synergies.soothing_water,
+                      Color{70, 150, 255, 255});
+    draw_synergy_item(unit::Element::Anemo, active_synergies.anemo_count, 2,
+                      active_synergies.impetuous_winds,
+                      Color{90, 220, 180, 255});
+    draw_synergy_item(unit::Element::Geo, active_synergies.geo_count, 2,
+                      active_synergies.enduring_rock, Color{240, 190, 70, 255});
+    draw_synergy_item(unit::Element::Electro, active_synergies.electro_count, 2,
+                      active_synergies.high_voltage, Color{200, 130, 255, 255});
+    draw_synergy_item(unit::Element::Cryo, active_synergies.cryo_count, 2,
                       active_synergies.shattering_ice,
-                      Color{180, 220, 255, 255});
-    draw_synergy_item(
-        "Canopy (-15% DMG)",
-        active_synergies.pyro_count + active_synergies.hydro_count +
-                    active_synergies.anemo_count + active_synergies.geo_count >
-                3
-            ? 4
-            : 0,
-        active_synergies.protective_canopy, GREEN);
+                      Color{160, 230, 255, 255});
 
     // 5. Draw Shop panel at the bottom
     DrawRectangle(0, 500, 1280, 220, Color{20, 20, 24, 255});

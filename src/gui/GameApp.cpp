@@ -322,6 +322,15 @@ GameApp::GameApp() {
             SetTextureFilter(element_icons_[i], TEXTURE_FILTER_BILINEAR);
         }
     }
+    {
+        std::string path = "assets/elements/Element_Canopy_White.png";
+        if (!FileExists(path.c_str()))
+            path = std::string("../") + path;
+        if (FileExists(path.c_str())) {
+            canopy_icon_ = LoadTexture(path.c_str());
+            SetTextureFilter(canopy_icon_, TEXTURE_FILTER_BILINEAR);
+        }
+    }
 
     // Set texture filter to POINT for pixelated/voxel look and apply alpha
     // discard shader
@@ -351,6 +360,8 @@ GameApp::~GameApp() {
         if (icon.id != 0)
             UnloadTexture(icon);
     }
+    if (canopy_icon_.id != 0)
+        UnloadTexture(canopy_icon_);
     CloseWindow();
 }
 
@@ -1893,7 +1904,7 @@ void GameApp::DrawGame2D() {
 
     // Vertical column of circular icons on the left edge
     float sy_y = 150.0f;
-    auto draw_synergy_item = [&](unit::Element elem, const char *name,
+    auto draw_synergy_item = [&](Texture2D icon, const char *name,
                                  const char *desc, int count, int threshold,
                                  bool active, Color col) {
         Vector2 center{44.0f, sy_y + 22.0f};
@@ -1923,7 +1934,6 @@ void GameApp::DrawGame2D() {
                      64, active ? col : Fade(col, 0.5f));
 
         // Elemental icon, tinted by state
-        Texture2D icon = element_icons_[(int)elem];
         if (icon.id != 0) {
             float icon_sz = inner * 1.5f;
             Rectangle src{0, 0, (float)icon.width, (float)icon.height};
@@ -1951,32 +1961,44 @@ void GameApp::DrawGame2D() {
         sy_y += 52.0f;
     };
 
-    draw_synergy_item(unit::Element::Pyro, "Fervent Flames",
-                      "Pyro units gain +25% ATK.", active_synergies.pyro_count,
-                      2, active_synergies.fervent_flames,
-                      Color{255, 110, 70, 255});
     draw_synergy_item(
-        unit::Element::Hydro, "Soothing Water", "Hydro units gain +25% Max HP.",
-        active_synergies.hydro_count, 2, active_synergies.soothing_water,
-        Color{70, 150, 255, 255});
-    draw_synergy_item(unit::Element::Anemo, "Impetuous Winds",
-                      "Anemo units get -15 Max Mana (faster skills).",
-                      active_synergies.anemo_count, 2,
-                      active_synergies.impetuous_winds,
-                      Color{90, 220, 180, 255});
-    draw_synergy_item(unit::Element::Geo, "Enduring Rock",
+        element_icons_[(int)unit::Element::Pyro], "Fervent Flames",
+        "Pyro units gain +25% ATK.", active_synergies.pyro_count, 2,
+        active_synergies.fervent_flames, Color{255, 110, 70, 255});
+    draw_synergy_item(
+        element_icons_[(int)unit::Element::Hydro], "Soothing Water",
+        "Hydro units gain +25% Max HP.", active_synergies.hydro_count, 2,
+        active_synergies.soothing_water, Color{70, 150, 255, 255});
+    draw_synergy_item(
+        element_icons_[(int)unit::Element::Anemo], "Impetuous Winds",
+        "Anemo units get -15 Max Mana (faster skills).",
+        active_synergies.anemo_count, 2, active_synergies.impetuous_winds,
+        Color{90, 220, 180, 255});
+    draw_synergy_item(element_icons_[(int)unit::Element::Geo], "Enduring Rock",
                       "Geo units gain +15% Shield and +15% DMG while shielded.",
                       active_synergies.geo_count, 2,
                       active_synergies.enduring_rock, Color{240, 190, 70, 255});
-    draw_synergy_item(unit::Element::Electro, "High Voltage",
+    draw_synergy_item(element_icons_[(int)unit::Element::Electro],
+                      "High Voltage",
                       "Electro units gain +5 mana on normal attacks.",
                       active_synergies.electro_count, 2,
                       active_synergies.high_voltage, Color{200, 130, 255, 255});
-    draw_synergy_item(unit::Element::Cryo, "Shattering Ice",
-                      "Cryo normal attacks have a 20% chance to freeze.",
-                      active_synergies.cryo_count, 2,
-                      active_synergies.shattering_ice,
-                      Color{160, 230, 255, 255});
+    draw_synergy_item(
+        element_icons_[(int)unit::Element::Cryo], "Shattering Ice",
+        "Cryo normal attacks have a 20% chance to freeze.",
+        active_synergies.cryo_count, 2, active_synergies.shattering_ice,
+        Color{160, 230, 255, 255});
+
+    // Four-element bond: count distinct elements present on the board
+    int unique_elements =
+        (active_synergies.pyro_count > 0) + (active_synergies.hydro_count > 0) +
+        (active_synergies.anemo_count > 0) + (active_synergies.geo_count > 0) +
+        (active_synergies.electro_count > 0) +
+        (active_synergies.cryo_count > 0);
+    draw_synergy_item(canopy_icon_, "Protective Canopy",
+                      "4+ distinct elements: your team takes -15% damage.",
+                      unique_elements, 4, active_synergies.protective_canopy,
+                      Color{120, 220, 130, 255});
 
     // 3b. Hovered equipment -> tooltip with its bonus
     if (!tip_show && hovered_equip_index_ >= 0 &&
@@ -2384,10 +2406,10 @@ int GameApp::MeasureGameText(const char *text, int fontSize, bool bold) {
 void GameApp::DrawTooltipBox(const std::string &title,
                              const std::vector<std::string> &lines,
                              Color accent, Vector2 anchor) {
-    const int title_size = 24;
-    const int line_size = 19;
-    const int pad = 18;
-    const int line_gap = 9;
+    const int title_size = 19;
+    const int line_size = 15;
+    const int pad = 13;
+    const int line_gap = 7;
 
     int max_w = MeasureGameText(title.c_str(), title_size, true);
     for (const auto &l : lines)

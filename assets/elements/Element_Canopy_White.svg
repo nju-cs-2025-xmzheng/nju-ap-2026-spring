@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Protective canopy: a solid shield with four elemental motes cut out
+       (45-degree rotated squares / diamonds) arranged around the centre,
+       representing the four-element bond. Cut-outs are transparent so the
+       disc colour shows through, matching the other white element glyphs. -->
+  <path fill-rule="evenodd" fill="#ffffff" d="
+    M64 12 L110 30 V62 C110 96 90 112 64 120 C38 112 18 96 18 62 V30 Z
+    M64 28 L81 45 L64 62 L47 45 Z
+    M45 49 L62 66 L45 83 L28 66 Z
+    M83 49 L100 66 L83 83 L66 66 Z
+    M64 70 L81 87 L64 104 L47 87 Z
+  "/>
+</svg>

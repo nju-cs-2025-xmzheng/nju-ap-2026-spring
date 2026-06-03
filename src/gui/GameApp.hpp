@@ -139,6 +139,8 @@ class GameApp {
 
     // Elemental icons (indexed by unit::Element value)
     Texture2D element_icons_[6] = {};
+    // Icon for the four-element "Protective Canopy" resonance
+    Texture2D canopy_icon_ = {};
 
     // UI Notification/Status Message
     std::string status_msg_ =

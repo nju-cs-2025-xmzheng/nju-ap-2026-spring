@@ -97,6 +97,9 @@ class GameApp {
     void DrawGameText(const char *text, int posX, int posY, int fontSize,
                       Color color, bool bold = false);
     int MeasureGameText(const char *text, int fontSize, bool bold = false);
+    void DrawTooltipBox(const std::string &title,
+                        const std::vector<std::string> &lines, Color accent,
+                        Vector2 anchor);
 
   private:
     engine::GameModeController mode_;

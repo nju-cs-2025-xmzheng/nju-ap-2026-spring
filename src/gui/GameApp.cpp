@@ -150,6 +150,38 @@ std::string GetElementName(unit::Element elem) {
     return "Unknown";
 }
 
+// Element a piece of equipment is themed after (for tooltip accent color)
+unit::Element EquipmentElement(const unit::Equipment &eq) {
+    if (std::holds_alternative<unit::HydroDrop>(eq))
+        return unit::Element::Hydro;
+    if (std::holds_alternative<unit::AnemoDrop>(eq))
+        return unit::Element::Anemo;
+    if (std::holds_alternative<unit::GeoDrop>(eq))
+        return unit::Element::Geo;
+    if (std::holds_alternative<unit::ElectroDrop>(eq))
+        return unit::Element::Electro;
+    if (std::holds_alternative<unit::CryoDrop>(eq))
+        return unit::Element::Cryo;
+    return unit::Element::Pyro;
+}
+
+// Human-readable stat bonus / effect granted by a piece of equipment
+std::string EquipmentEffect(const unit::Equipment &eq) {
+    if (std::holds_alternative<unit::PyroDrop>(eq))
+        return "ATK +15";
+    if (std::holds_alternative<unit::HydroDrop>(eq))
+        return "Max HP +150";
+    if (std::holds_alternative<unit::AnemoDrop>(eq))
+        return "Max Mana -30 (faster skills)";
+    if (std::holds_alternative<unit::GeoDrop>(eq))
+        return "Shield +100";
+    if (std::holds_alternative<unit::ElectroDrop>(eq))
+        return "Normal attack strikes twice";
+    if (std::holds_alternative<unit::CryoDrop>(eq))
+        return "Takes reduced damage";
+    return "";
+}
+
 GameApp::GameApp() {
     // 1. Initialize Raylib window
     const int screenWidth = 1280;
@@ -1847,6 +1879,13 @@ void GameApp::DrawGame2D() {
         DrawGameText(status_msg_.c_str(), 640 - width / 2, 90, 20, GOLD);
     }
 
+    // Hover tooltip state (filled below, drawn last so it sits on top)
+    bool tip_show = false;
+    std::string tip_title;
+    std::vector<std::string> tip_lines;
+    Color tip_accent = WHITE;
+    Vector2 mouse = GetMousePosition();
+
     // 3. Draw Active Synergies as circular elemental icons with ring progress
     auto active_synergies = unit::compute_synergies(
         engine::is_combat(mode_) ? engine::active_board(mode_)
@@ -1854,7 +1893,8 @@ void GameApp::DrawGame2D() {
 
     // Vertical column of circular icons on the left edge
     float sy_y = 150.0f;
-    auto draw_synergy_item = [&](unit::Element elem, int count, int threshold,
+    auto draw_synergy_item = [&](unit::Element elem, const char *name,
+                                 const char *desc, int count, int threshold,
                                  bool active, Color col) {
         Vector2 center{44.0f, sy_y + 22.0f};
         const float outer = 20.0f;
@@ -1893,25 +1933,112 @@ void GameApp::DrawGame2D() {
             DrawTexturePro(icon, src, dst, {0, 0}, 0.0f, tint);
         }
 
+        // Hover -> capture an enlarged tooltip describing this resonance
+        if (CheckCollisionPointCircle(mouse, center, outer)) {
+            tip_show = true;
+            tip_accent = col;
+            tip_title = name;
+            tip_lines = {
+                desc,
+                "Units: " + std::to_string(count) + " / " +
+                    std::to_string(threshold),
+                active ? "Status: ACTIVE"
+                       : "Status: inactive (need " + std::to_string(threshold) +
+                             ")",
+            };
+        }
+
         sy_y += 52.0f;
     };
 
-    draw_synergy_item(unit::Element::Pyro, active_synergies.pyro_count, 2,
-                      active_synergies.fervent_flames,
+    draw_synergy_item(unit::Element::Pyro, "Fervent Flames",
+                      "Pyro units gain +25% ATK.", active_synergies.pyro_count,
+                      2, active_synergies.fervent_flames,
                       Color{255, 110, 70, 255});
-    draw_synergy_item(unit::Element::Hydro, active_synergies.hydro_count, 2,
-                      active_synergies.soothing_water,
-                      Color{70, 150, 255, 255});
-    draw_synergy_item(unit::Element::Anemo, active_synergies.anemo_count, 2,
+    draw_synergy_item(
+        unit::Element::Hydro, "Soothing Water", "Hydro units gain +25% Max HP.",
+        active_synergies.hydro_count, 2, active_synergies.soothing_water,
+        Color{70, 150, 255, 255});
+    draw_synergy_item(unit::Element::Anemo, "Impetuous Winds",
+                      "Anemo units get -15 Max Mana (faster skills).",
+                      active_synergies.anemo_count, 2,
                       active_synergies.impetuous_winds,
                       Color{90, 220, 180, 255});
-    draw_synergy_item(unit::Element::Geo, active_synergies.geo_count, 2,
+    draw_synergy_item(unit::Element::Geo, "Enduring Rock",
+                      "Geo units gain +15% Shield and +15% DMG while shielded.",
+                      active_synergies.geo_count, 2,
                       active_synergies.enduring_rock, Color{240, 190, 70, 255});
-    draw_synergy_item(unit::Element::Electro, active_synergies.electro_count, 2,
+    draw_synergy_item(unit::Element::Electro, "High Voltage",
+                      "Electro units gain +5 mana on normal attacks.",
+                      active_synergies.electro_count, 2,
                       active_synergies.high_voltage, Color{200, 130, 255, 255});
-    draw_synergy_item(unit::Element::Cryo, active_synergies.cryo_count, 2,
+    draw_synergy_item(unit::Element::Cryo, "Shattering Ice",
+                      "Cryo normal attacks have a 20% chance to freeze.",
+                      active_synergies.cryo_count, 2,
                       active_synergies.shattering_ice,
                       Color{160, 230, 255, 255});
+
+    // 3b. Hovered equipment -> tooltip with its bonus
+    if (!tip_show && hovered_equip_index_ >= 0 &&
+        hovered_equip_index_ < (int)engine::session(mode_).equip_pool_.size()) {
+        const unit::Equipment &eq =
+            engine::session(mode_).equip_pool_[hovered_equip_index_];
+        tip_show = true;
+        tip_accent = GetElementColor(EquipmentElement(eq));
+        tip_title = unit::name(eq);
+        tip_lines = {"Equipment", EquipmentEffect(eq),
+                     "Drag onto a unit to equip."};
+    }
+
+    // 3c. Hovered unit -> tooltip with current (synergy + equipment) stats
+    if (!tip_show && has_hover_) {
+        auto u_ptr = engine::get_unit(engine::is_combat(mode_)
+                                          ? engine::active_board(mode_)
+                                          : engine::session(mode_).board_,
+                                      hovered_coord_);
+        if (u_ptr) {
+            unit::Element elem = unit::element(*u_ptr);
+            // Stored stats already include equipment bonuses. Synergy stat
+            // bonuses are only baked in during combat, so preview them here
+            // for the preparation phase to show effective values.
+            unit::UnitStats s = unit::stats(*u_ptr);
+            auto syn = unit::compute_synergies(
+                engine::is_combat(mode_) ? engine::active_board(mode_)
+                                         : engine::session(mode_).board_,
+                s.owner);
+            if (!engine::is_combat(mode_)) {
+                if (syn.fervent_flames)
+                    s.atk = int(s.atk * 1.25);
+                if (syn.soothing_water) {
+                    s.max_hp = int(s.max_hp * 1.25);
+                    s.hp = int(s.hp * 1.25);
+                }
+                if (syn.impetuous_winds)
+                    s.max_mana = std::max(10, s.max_mana - 15);
+                if (syn.enduring_rock && s.shield > 0)
+                    s.shield = int(s.shield * 1.15);
+            }
+
+            tip_show = true;
+            tip_accent = GetElementColor(elem);
+            tip_title =
+                GetElementName(elem) + " Slime  Lv." + std::to_string(s.level);
+            tip_lines.push_back("HP: " + std::to_string(s.hp) + " / " +
+                                std::to_string(s.max_hp));
+            tip_lines.push_back("ATK: " + std::to_string(s.atk));
+            if (s.shield > 0)
+                tip_lines.push_back("Shield: " + std::to_string(s.shield));
+            tip_lines.push_back("Mana: " + std::to_string(s.mana) + " / " +
+                                std::to_string(s.max_mana));
+            tip_lines.push_back("Range: " + std::to_string(s.range));
+            std::string eq_name = unit::name(s.equipped);
+            if (eq_name == "None")
+                tip_lines.push_back("Equip: None");
+            else
+                tip_lines.push_back("Equip: " + eq_name + " (" +
+                                    EquipmentEffect(s.equipped) + ")");
+        }
+    }
 
     // 5. Draw Shop panel at the bottom
     DrawRectangle(0, 500, 1280, 220, Color{20, 20, 24, 255});
@@ -2173,6 +2300,10 @@ void GameApp::DrawGame2D() {
         }
     }
 
+    // 5.9 Draw hover tooltip (resonance / equipment / unit) on top of the HUD
+    if (tip_show)
+        DrawTooltipBox(tip_title, tip_lines, tip_accent, mouse);
+
     // 6. Draw Combat Result popup overlay
     if (engine::result_announced(mode_)) {
         engine::CombatResult result = engine::combat_result(mode_);
@@ -2247,6 +2378,56 @@ int GameApp::MeasureGameText(const char *text, int fontSize, bool bold) {
     } else {
         Vector2 size = MeasureTextEx(font, text, (float)fontSize, 1.0f);
         return (int)size.x;
+    }
+}
+
+void GameApp::DrawTooltipBox(const std::string &title,
+                             const std::vector<std::string> &lines,
+                             Color accent, Vector2 anchor) {
+    const int title_size = 24;
+    const int line_size = 19;
+    const int pad = 18;
+    const int line_gap = 9;
+
+    int max_w = MeasureGameText(title.c_str(), title_size, true);
+    for (const auto &l : lines)
+        max_w = std::max(max_w, MeasureGameText(l.c_str(), line_size, false));
+
+    int box_w = max_w + pad * 2;
+    int box_h =
+        pad * 2 + title_size + 10 + (int)lines.size() * (line_size + line_gap);
+
+    // Position next to the anchor, clamped to the screen
+    float bx = anchor.x + 20.0f;
+    float by = anchor.y + 20.0f;
+    if (bx + box_w > 1280.0f)
+        bx = anchor.x - box_w - 20.0f;
+    if (bx < 8.0f)
+        bx = 8.0f;
+    if (by + box_h > 720.0f)
+        by = 720.0f - box_h - 8.0f;
+    if (by < 8.0f)
+        by = 8.0f;
+
+    Rectangle box{bx, by, (float)box_w, (float)box_h};
+
+    // Drop shadow, panel, accent border
+    DrawRectangleRounded({bx + 5, by + 6, box.width, box.height}, 0.05f, 8,
+                         Fade(BLACK, 0.45f));
+    DrawRectangleRounded(box, 0.05f, 8, Color{18, 18, 24, 248});
+    DrawRectangleRoundedLinesEx(box, 0.05f, 8, 2.0f, accent);
+
+    int tx = (int)bx + pad;
+    int ty = (int)by + pad;
+    DrawGameText(title.c_str(), tx, ty, title_size, accent, true);
+    int divider_y = ty + title_size + 5;
+    DrawLine(tx, divider_y, tx + max_w, divider_y, Fade(accent, 0.45f));
+
+    ty = divider_y + 10;
+    for (const auto &l : lines) {
+        DrawGameText(l.c_str(), tx, ty, line_size, Color{225, 225, 235, 255},
+                     false);
+        ty += line_size + line_gap;
     }
 }
 

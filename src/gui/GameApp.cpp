@@ -267,10 +267,10 @@ GameApp::GameApp() {
     hex_model_.materials[0].shader = alpha_shader_;
 
     // 5. Load Arena Model (Minecraft-style landscape GLB)
-    if (FileExists("assets/scenes/arena/arena.glb")) {
-        arena_model_ = LoadModel("assets/scenes/arena/arena.glb");
-    } else if (FileExists("../assets/scenes/arena/arena.glb")) {
-        arena_model_ = LoadModel("../assets/scenes/arena/arena.glb");
+    if (FileExists("assets/scenes/arena.glb")) {
+        arena_model_ = LoadModel("assets/scenes/arena.glb");
+    } else if (FileExists("../assets/scenes/arena.glb")) {
+        arena_model_ = LoadModel("../assets/scenes/arena.glb");
     } else {
         arena_model_ = {0};
     }

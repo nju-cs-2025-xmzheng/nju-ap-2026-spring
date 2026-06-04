@@ -1817,33 +1817,42 @@ void GameApp::DrawGame2D() {
         engine::mode_kind(mode_) != engine::ModeKind::SinglePlayer;
     bool local_ready = is_multiplayer && mode_.multiplayer_.local_ready_;
 
-    // 1. Draw HUD top stats bar
-    DrawRectangle(0, 0, 1280, 60, Color{16, 16, 20, 240});
-    DrawRectangleLines(0, 0, 1280, 60, Color{40, 40, 50, 255});
+    // 1. Top HUD as three floating pieces: MENU (left), economy readout
+    // (middle), phase/ready button (right). Player & opponent HP live in the
+    // right-hand sidebar now (drawn later, after the ready-dim overlay).
+    const int top_y = 12;
+    const int top_h = 36;
+    Vector2 mouse_top = GetMousePosition();
 
-    // Player HP
-    DrawGameText("PLAYER HP:", 30, 20, 22, LIGHTGRAY);
-    DrawRectangle(150, 20, 200, 20, DARKGRAY);
-    float hp_pct = engine::session(mode_).player_.hp / 100.0f;
-    DrawRectangle(150, 20, (int)(200 * hp_pct), 20,
-                  hp_pct > 0.4f ? GREEN : RED);
-    std::string hp_text =
-        std::to_string(engine::session(mode_).player_.hp) + "/100";
-    DrawGameText(hp_text.c_str(), 220, 22, 18, WHITE);
+    auto draw_floating = [&](Rectangle r, Color bg) {
+        DrawRectangleRounded(r, 0.3f, 6, bg);
+        DrawRectangleRoundedLinesEx(r, 0.3f, 6, 1.0f, Color{50, 50, 60, 255});
+    };
 
-    // Player Gold
-    DrawGameText("GOLD:", 400, 20, 22, LIGHTGRAY);
-    std::string gold_text =
-        std::to_string(engine::session(mode_).player_.gold) + " G";
-    DrawGameText(gold_text.c_str(), 470, 20, 22, GOLD);
+    // -- Left: exit to main menu --
+    Rectangle exit_btn{14.0f, (float)top_y, 96.0f, (float)top_h};
+    bool exit_hover = CheckCollisionPointRec(mouse_top, exit_btn);
+    draw_floating(exit_btn,
+                  exit_hover ? Color{70, 44, 48, 255} : Color{24, 22, 26, 235});
+    {
+        int tw = MeasureGameText("MENU", 16, true);
+        DrawGameText("MENU", (int)(exit_btn.x + exit_btn.width / 2 - tw / 2),
+                     top_y + 9, 16, exit_hover ? WHITE : LIGHTGRAY, true);
+    }
+    if (exit_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        state_ = GameState::MainMenu;
+        menu_transition_cooldown_ = 0.2f;
+        is_slot_menu_ = false;
+        has_selection_ = false;
+        is_dragging_ = false;
+        has_hover_ = false;
+        hovered_equip_index_ = -1;
+        selected_equip_index_ = -1;
+        is_dragging_equip_ = false;
+        drag_equip_source_index_ = -1;
+    }
 
-    // Player Level
-    DrawGameText("LEVEL:", 580, 20, 22, LIGHTGRAY);
-    std::string level_text =
-        std::to_string(engine::session(mode_).player_.level);
-    DrawGameText(level_text.c_str(), 660, 20, 22, SKYBLUE);
-
-    // Board population count (only count PlayerCtrl units)
+    // -- Middle: GOLD / LEVEL / ROUND --
     int board_units = 0;
     for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
         for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
@@ -1851,60 +1860,59 @@ void GameApp::DrawGame2D() {
                                       ? engine::active_board(mode_)
                                       : engine::session(mode_).board_,
                                   engine::HexCoord{r, c})) {
-                if (unit::stats(*u).owner == unit::Owner::PlayerCtrl) {
+                if (unit::stats(*u).owner == unit::Owner::PlayerCtrl)
                     board_units++;
-                }
             }
         }
     }
-    std::string pop_text =
-        "(" + std::to_string(board_units) + "/" +
+    Rectangle mid{430.0f, (float)top_y, 420.0f, (float)top_h};
+    draw_floating(mid, Color{20, 20, 24, 235});
+    int mid_ty = top_y + 9;
+    DrawGameText("GOLD", 452, mid_ty, 16, LIGHTGRAY);
+    DrawGameText(std::to_string(engine::session(mode_).player_.gold).c_str(),
+                 512, mid_ty, 16, GOLD);
+    DrawGameText("LEVEL", 580, mid_ty, 16, LIGHTGRAY);
+    std::string lvl_txt =
+        std::to_string(engine::session(mode_).player_.level) + " (" +
+        std::to_string(board_units) + "/" +
         std::to_string(engine::session(mode_).player_.level) + ")";
-    DrawGameText(pop_text.c_str(), 690, 22, 18, LIGHTGRAY);
+    DrawGameText(lvl_txt.c_str(), 645, mid_ty, 16, SKYBLUE);
+    DrawGameText("ROUND", 745, mid_ty, 16, LIGHTGRAY);
+    DrawGameText(std::to_string(engine::session(mode_).round_).c_str(), 810,
+                 mid_ty, 16, WHITE);
 
-    // Round number
-    DrawGameText("ROUND:", 800, 20, 22, LIGHTGRAY);
-    std::string round_text = std::to_string(engine::session(mode_).round_);
-    DrawGameText(round_text.c_str(), 890, 20, 22, WHITE);
-
-    // Phase Indicator / Start Combat Button
+    // -- Right: phase / ready button --
+    const float rb_w = 196.0f;
+    const float rb_x = 1280.0f - rb_w - 14.0f;
+    Rectangle ready_btn{rb_x, (float)top_y, rb_w, (float)top_h};
     if (engine::is_combat(mode_)) {
-        DrawRectangle(980, 15, 200, 30, RED);
-        DrawRectangleLines(980, 15, 200, 30, Color{100, 30, 30, 255});
-        int text_w = MeasureGameText("COMBAT", 16, true);
-        DrawGameText("COMBAT", 980 + 200 / 2 - text_w / 2, 22, 16, WHITE, true);
+        draw_floating(ready_btn, Color{150, 40, 40, 255});
+        int tw = MeasureGameText("COMBAT", 16, true);
+        DrawGameText("COMBAT", (int)(rb_x + rb_w / 2 - tw / 2), top_y + 9, 16,
+                     WHITE, true);
     } else {
         std::string button_text = "START COMBAT";
         if (is_multiplayer) {
-            int ready_count = 0;
-            if (mode_.multiplayer_.local_ready_)
-                ready_count++;
-            if (mode_.multiplayer_.remote_ready_)
-                ready_count++;
-            // When already readied the button becomes a CANCEL toggle so the
-            // player can keep editing while waiting for the opponent.
+            int ready_count = (mode_.multiplayer_.local_ready_ ? 1 : 0) +
+                              (mode_.multiplayer_.remote_ready_ ? 1 : 0);
+            // When already readied the button toggles to CANCEL so the player
+            // can keep editing while waiting for the opponent.
             button_text = (local_ready ? "CANCEL (" : "READY (") +
                           std::to_string(ready_count) + "/2)";
         }
-
-        bool hover =
-            CheckCollisionPointRec(GetMousePosition(), {980, 15, 200, 30});
+        bool hover = CheckCollisionPointRec(mouse_top, ready_btn);
         Color btn_color;
         if (local_ready) {
-            // Amber "cancel" state, distinct from the green ready/start action.
             btn_color =
                 hover ? Color{200, 140, 40, 255} : Color{160, 110, 30, 255};
         } else {
             btn_color =
                 hover ? Color{40, 140, 55, 255} : Color{30, 110, 45, 255};
         }
-
-        DrawRectangle(980, 15, 200, 30, btn_color);
-        DrawRectangleLines(980, 15, 200, 30, Color{60, 60, 70, 255});
-        int text_w = MeasureGameText(button_text.c_str(), 16, true);
-        DrawGameText(button_text.c_str(), 980 + 200 / 2 - text_w / 2, 22, 16,
-                     WHITE, true);
-
+        draw_floating(ready_btn, btn_color);
+        int tw = MeasureGameText(button_text.c_str(), 16, true);
+        DrawGameText(button_text.c_str(), (int)(rb_x + rb_w / 2 - tw / 2),
+                     top_y + 9, 16, WHITE, true);
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             if (local_ready) {
                 ApplyModeUpdate(engine::cancel_ready(mode_));
@@ -2129,74 +2137,79 @@ void GameApp::DrawGame2D() {
             auto stats = unit::stats(unit);
 
             // Element color stripe across the top.
-            DrawRectangle((int)x + 3, (int)y + 3, (int)kShopCardW - 6, 5, col);
+            DrawRectangle((int)x + 4, (int)y + 4, (int)kShopCardW - 8, 5, col);
 
             // Star levels
             for (int s = 0; s < stats.level; ++s) {
-                DrawStar2D(x + 14.0f + s * 16.0f, y + 19.0f, 6.5f, 3.0f, YELLOW);
+                DrawStar2D(x + 16.0f + s * 17.0f, y + 22.0f, 7.0f, 3.0f, YELLOW);
             }
 
             // Element name
             std::string name = GetElementName(unit::element(unit)) + " Slime";
-            DrawGameText(name.c_str(), (int)x + 10, (int)y + 31, 13, WHITE);
+            DrawGameText(name.c_str(), (int)x + 10, (int)y + 36, 14, WHITE);
 
             // Stats summary
             std::string stats_lbl = "HP " + std::to_string(stats.max_hp) +
-                                    "  ATK " + std::to_string(stats.atk);
-            DrawGameText(stats_lbl.c_str(), (int)x + 10, (int)y + 51, 11,
+                                    "   ATK " + std::to_string(stats.atk);
+            DrawGameText(stats_lbl.c_str(), (int)x + 10, (int)y + 60, 12,
                          LIGHTGRAY);
 
-            // Cost tag
-            std::string cost_str = std::to_string(cost) + " G";
-            DrawGameText(cost_str.c_str(), (int)x + 10, (int)y + 70, 14, GOLD);
-
-            // BUY button
-            Rectangle buy{x + 8, y + kShopCardH - 36, kShopCardW - 16, 28};
+            // BUY button — shows the cost directly.
+            Rectangle buy{x + 8, y + kShopCardH - 38, kShopCardW - 16, 30};
             bool buy_hover =
                 shop_buyable && CheckCollisionPointRec(GetMousePosition(), buy);
             Color buy_col = shop_buyable ? (buy_hover ? Color{40, 130, 70, 255}
                                                       : Color{30, 90, 50, 255})
                                          : Color{45, 45, 52, 255};
             DrawRectangleRounded(buy, 0.3f, 6, buy_col);
-            const char *buy_lbl = shop_frozen ? "LOCKED" : "BUY";
-            int buy_w = MeasureGameText(buy_lbl, 13, true);
-            DrawGameText(buy_lbl, (int)(buy.x + buy.width / 2 - buy_w / 2),
-                         (int)(buy.y + 7), 13, shop_buyable ? WHITE : GRAY,
-                         true);
+            std::string buy_lbl =
+                shop_frozen ? "LOCKED" : "BUY  " + std::to_string(cost) + "G";
+            int buy_w = MeasureGameText(buy_lbl.c_str(), 14, true);
+            DrawGameText(buy_lbl.c_str(), (int)(buy.x + buy.width / 2 - buy_w / 2),
+                         (int)(buy.y + 8), 14, shop_buyable ? WHITE : GRAY, true);
 
             if (buy_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 ApplyModeUpdate(engine::act_buy(mode_, slot));
             }
         }
 
-        // Action block (refresh / freeze / level), same footprint as one card.
+        // Action block: refresh / freeze / level, wrapped in a card-styled
+        // container matching a unit card; each button is the same size as a BUY
+        // button and stacked inside.
         float action_x = ShopBlockX(kShopCardCount);
-        float act_btn_h = (kShopCardH - 2.0f * 6.0f) / 3.0f;
+        Rectangle action_card{action_x, row_y, kShopCardW, kShopCardH};
+        DrawRectangleRounded(action_card, 0.06f, 6, Color{28, 28, 34, 255});
+        DrawRectangleRoundedLinesEx(action_card, 0.06f, 6, 1.0f,
+                                    Color{55, 55, 65, 255});
+
         auto draw_action = [&](const char *text, float y, Color col,
                                Color hover_col, bool enabled, auto action_func) {
-            Rectangle b{action_x, y, kShopCardW, act_btn_h};
+            Rectangle b{action_x + 8, y, kShopCardW - 16, 30};
             bool hover =
                 enabled && CheckCollisionPointRec(GetMousePosition(), b);
-            DrawRectangleRounded(b, 0.18f, 6,
+            DrawRectangleRounded(b, 0.3f, 6,
                                  enabled ? (hover ? hover_col : col)
                                          : Color{45, 45, 52, 255});
-            int text_w = MeasureGameText(text, 13, true);
-            DrawGameText(text, (int)(b.x + kShopCardW / 2 - text_w / 2),
-                         (int)(b.y + act_btn_h / 2 - 7), 13,
-                         enabled ? WHITE : GRAY, true);
+            int text_w = MeasureGameText(text, 14, true);
+            DrawGameText(text, (int)(b.x + b.width / 2 - text_w / 2),
+                         (int)(b.y + 8), 14, enabled ? WHITE : GRAY, true);
             if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 action_func();
             }
         };
 
+        // Three buttons stacked with even spacing inside the card.
+        float a_y0 = row_y + 10.0f;
+        float a_step = 41.0f;
+
         // Refresh — disabled while frozen.
-        draw_action("REFRESH 1G", row_y, Color{140, 60, 30, 255},
+        draw_action("REFRESH 1G", a_y0, Color{140, 60, 30, 255},
                     Color{180, 80, 40, 255}, shop_buyable,
                     [&]() { ApplyModeUpdate(engine::act_refresh(mode_)); });
 
         // Freeze toggle — always available so the player can unfreeze.
         draw_action(
-            shop_frozen ? "FROZEN" : "FREEZE", row_y + act_btn_h + 6.0f,
+            shop_frozen ? "FROZEN" : "FREEZE", a_y0 + a_step,
             shop_frozen ? Color{30, 144, 255, 255} : Color{20, 100, 130, 255},
             shop_frozen ? Color{50, 190, 240, 255} : Color{30, 130, 170, 255},
             can_prepare, [&]() { ApplyModeUpdate(engine::act_freeze(mode_)); });
@@ -2204,7 +2217,7 @@ void GameApp::DrawGame2D() {
         // Level up
         int lvl_cost = engine::session(mode_).player_.level * 5 + 5;
         std::string level_lbl = "LEVEL " + std::to_string(lvl_cost) + "G";
-        draw_action(level_lbl.c_str(), row_y + 2.0f * (act_btn_h + 6.0f),
+        draw_action(level_lbl.c_str(), a_y0 + 2.0f * a_step,
                     Color{30, 60, 140, 255}, Color{40, 80, 180, 255},
                     can_prepare,
                     [&]() { ApplyModeUpdate(engine::act_level(mode_)); });
@@ -2352,44 +2365,47 @@ void GameApp::DrawGame2D() {
         DrawGameText(sub, 640 - sw / 2, 350, 18, LIGHTGRAY, false);
     }
 
-    // 5.8 Opponent summary panel (multiplayer only), drawn after the dim so it
-    // stays readable while waiting.
-    if (is_multiplayer) {
-        engine::OpponentInfo opp = engine::opponent_info(mode_);
-        if (opp.available) {
-            const int pw = 232;
-            const int ph = 58;
-            const int px = 1280 - pw - 16;
-            const int py = 68;
-            DrawRectangle(px, py, pw, ph, Color{16, 16, 20, 235});
-            DrawRectangleLines(px, py, pw, ph, Color{45, 45, 55, 255});
+    // 5.8 Right-hand player sidebar: a compact name + HP entry per player, your
+    // own (green) on top, then any opponents. Drawn after the dim so it stays
+    // readable while waiting. Built as a list to allow more players later.
+    {
+        const float side_w = 196.0f;
+        const float side_x = 1280.0f - side_w - 14.0f;
+        const float entry_h = 34.0f;
+        float entry_y = (float)top_y + (float)top_h + 10.0f; // below ready btn
 
-            DrawGameText("OPPONENT", px + 12, py + 6, 13, LIGHTGRAY);
+        auto draw_player_entry = [&](const char *name, int hp, Color accent) {
+            Rectangle e{side_x, entry_y, side_w, entry_h};
+            DrawRectangleRounded(e, 0.25f, 6, Color{16, 16, 20, 230});
+            DrawRectangleRoundedLinesEx(e, 0.25f, 6, 1.0f,
+                                        Color{45, 45, 55, 255});
+            DrawGameText(name, (int)side_x + 8, (int)entry_y + 3, 12, LIGHTGRAY);
 
-            // Ready indicator dot + label on the right of the header.
-            Color ready_col = opp.ready ? GREEN : Color{90, 90, 100, 255};
-            const char *ready_lbl = opp.ready ? "READY" : "PREP";
-            int rl_w = MeasureGameText(ready_lbl, 11, true);
-            DrawCircle(px + pw - 18 - rl_w - 8, py + 13, 4.0f, ready_col);
-            DrawGameText(ready_lbl, px + pw - 12 - rl_w, py + 7, 11, ready_col,
-                         true);
+            std::string hp_lbl = std::to_string(hp) + "/100";
+            int hl_w = MeasureGameText(hp_lbl.c_str(), 11, false);
+            DrawGameText(hp_lbl.c_str(), (int)(side_x + side_w - 8 - hl_w),
+                         (int)entry_y + 4, 11, WHITE);
 
-            // HP bar
-            int hb_x = px + 12;
-            int hb_y = py + 30;
-            int hb_w = 128;
-            DrawRectangle(hb_x, hb_y, hb_w, 14, DARKGRAY);
-            float opp_hp_pct = std::clamp(opp.hp / 100.0f, 0.0f, 1.0f);
-            DrawRectangle(hb_x, hb_y, (int)(hb_w * opp_hp_pct), 14,
-                          opp_hp_pct > 0.4f ? GREEN : RED);
-            std::string hp_lbl = std::to_string(opp.hp) + "/100";
-            DrawGameText(hp_lbl.c_str(), hb_x + 4, hb_y + 1, 11, WHITE);
+            int bx = (int)side_x + 8;
+            int by = (int)entry_y + 19;
+            int bw = (int)side_w - 16;
+            DrawRectangle(bx, by, bw, 9, Color{40, 40, 48, 255});
+            float pct = std::clamp(hp / 100.0f, 0.0f, 1.0f);
+            DrawRectangle(bx, by, (int)(bw * pct), 9, accent);
 
-            // Level / round
-            std::string lv_lbl = "Lv " + std::to_string(opp.level) + "  Rd " +
-                                 std::to_string(opp.round);
-            DrawGameText(lv_lbl.c_str(), hb_x + hb_w + 10, hb_y + 1, 12,
-                         SKYBLUE);
+            entry_y += entry_h + 8.0f;
+        };
+
+        // Your own HP (green), always shown.
+        draw_player_entry("YOU", engine::session(mode_).player_.hp,
+                          Color{70, 200, 90, 255});
+
+        // Opponent(s).
+        if (is_multiplayer) {
+            engine::OpponentInfo opp = engine::opponent_info(mode_);
+            if (opp.available) {
+                draw_player_entry("OPPONENT", opp.hp, Color{220, 90, 90, 255});
+            }
         }
     }
 

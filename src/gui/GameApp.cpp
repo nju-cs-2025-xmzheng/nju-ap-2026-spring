@@ -550,11 +550,11 @@ void GameApp::Update() {
         }
     } else { // GameState::Gameplay
         if (engine::is_combat(mode_)) {
-            target_cam_pos_ = {0.0f, 15.0f, 3.0f};
-            target_cam_target_ = {0.0f, 0.0f, 1.4f};
+            target_cam_pos_ = {0.0f, 11.0f, 2.5f};
+            target_cam_target_ = {0.0f, 0.0f, 0.0f};
         } else {
-            target_cam_pos_ = {0.0f, 8.5f, 9.0f};
-            target_cam_target_ = {0.0f, 0.0f, 4.2f};
+            target_cam_pos_ = {0.0f, 7.5f, 8.5f};
+            target_cam_target_ = {0.0f, 0.0f, 3.5f};
         }
     }
     camera_.position =
@@ -1463,7 +1463,7 @@ void GameApp::DrawGame3D() {
     // Draw Arena Background Scene
     if (arena_model_.meshCount > 0) {
         rlDisableBackfaceCulling();
-        DrawModelEx(arena_model_, {0.3f, -3.2f, -5.0f}, {0.0f, 1.0f, 0.0f},
+        DrawModelEx(arena_model_, {0.3f, -3.1f, -5.0f}, {0.0f, 1.0f, 0.0f},
                     0.0f, {0.6f, 0.6f, 0.6f}, WHITE);
         rlEnableBackfaceCulling();
     }

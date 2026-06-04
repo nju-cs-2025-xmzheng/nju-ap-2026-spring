@@ -1987,7 +1987,7 @@ void GameApp::DrawGame2D() {
                 shop_frozen ? "LOCKED" : "BUY  " + std::to_string(cost) + "G";
             int buy_w = MeasureGameText(buy_lbl.c_str(), 14, true);
             DrawGameText(
-                buy_lbl.c_str(), (int)(buy.x + buy.width / 2 - buy_w / 2),
+                buy_lbl.c_str(), (int)(buy.x + buy.width / 2 - buy_w / 2.0f),
                 (int)(buy.y + 8), 14, shop_buyable ? WHITE : GRAY, true);
 
             if (buy_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -2014,7 +2014,7 @@ void GameApp::DrawGame2D() {
                                  enabled ? (hover ? hover_col : col)
                                          : Color{45, 45, 52, 255});
             int text_w = MeasureGameText(text, 14, true);
-            DrawGameText(text, (int)(b.x + b.width / 2 - text_w / 2),
+            DrawGameText(text, (int)(b.x + b.width / 2 - text_w / 2.0f),
                          (int)(b.y + 8), 14, enabled ? WHITE : GRAY, true);
             if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 action_func();
@@ -2071,10 +2071,10 @@ void GameApp::DrawGame2D() {
             // Centre the prompt in the middle of the sell strip.
             float cx = sell_zone.x + sell_zone.width / 2.0f;
             int tw = MeasureGameText(sell_text.c_str(), 18, true);
-            DrawRectangle((int)(cx - tw / 2 - 12),
+            DrawRectangle((int)(cx - tw / 2.0f - 12),
                           (int)(sell_zone.y + sell_zone.height / 2 - 16),
                           tw + 24, 34, Color{15, 15, 20, 235});
-            DrawGameText(sell_text.c_str(), (int)(cx - tw / 2),
+            DrawGameText(sell_text.c_str(), (int)(cx - tw / 2.0f),
                          (int)(sell_zone.y + sell_zone.height / 2 - 9), 18,
                          glow, true);
         }
@@ -2219,7 +2219,7 @@ void GameApp::DrawGame2D() {
         {
             int tw = MeasureGameText("MENU", 16, true);
             DrawGameText("MENU",
-                         (int)(exit_btn.x + exit_btn.width / 2 - tw / 2),
+                         (int)(exit_btn.x + exit_btn.width / 2 - tw / 2.0f),
                          top_y + 9, 16, WHITE, true);
         }
         if (exit_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -2271,7 +2271,7 @@ void GameApp::DrawGame2D() {
         if (engine::is_combat(mode_)) {
             draw_floating(ready_btn, Color{150, 40, 40, 255});
             int tw = MeasureGameText("COMBAT", 16, true);
-            DrawGameText("COMBAT", (int)(right_x + panel_w / 2 - tw / 2),
+            DrawGameText("COMBAT", (int)(right_x + panel_w / 2 - tw / 2.0f),
                          top_y + 9, 16, WHITE, true);
         } else {
             std::string button_text = "START COMBAT";
@@ -2295,8 +2295,8 @@ void GameApp::DrawGame2D() {
             draw_floating(ready_btn, btn_color);
             int tw = MeasureGameText(button_text.c_str(), 16, true);
             DrawGameText(button_text.c_str(),
-                         (int)(right_x + panel_w / 2 - tw / 2), top_y + 9, 16,
-                         WHITE, true);
+                         (int)(right_x + panel_w / 2 - tw / 2.0f), top_y + 9,
+                         16, WHITE, true);
             if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 if (local_ready) {
                     ApplyModeUpdate(engine::cancel_ready(mode_));

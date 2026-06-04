@@ -26,6 +26,17 @@ struct ConnectionConfig {
     std::uint16_t port = 39090;
 };
 
+// A snapshot of the opposing player shown in the multiplayer HUD. `available`
+// is false in single-player (and before the first opponent update arrives).
+struct OpponentInfo {
+    bool available = false;
+    int hp = 100;
+    int gold = 0;
+    int level = 1;
+    int round = 1;
+    bool ready = false;
+};
+
 namespace __tag {
 struct mode_kind_t {};
 struct session_t {};
@@ -43,6 +54,8 @@ struct join_multiplayer_t {};
 struct leave_game_t {};
 struct poll_mode_t {};
 struct start_combat_t {};
+struct cancel_ready_t {};
+struct opponent_info_t {};
 struct process_combat_tick_t {};
 struct acknowledge_result_t {};
 struct on_session_loaded_t {};
@@ -219,6 +232,26 @@ struct start_combat_fn {
     }
 };
 
+struct cancel_ready_fn {
+    template <typename M>
+    constexpr auto operator()(M &&mode) const
+        noexcept(noexcept(tag_invoke(__tag::cancel_ready_t{},
+                                     std::forward<M>(mode))))
+            -> decltype(auto) {
+        return tag_invoke(__tag::cancel_ready_t{}, std::forward<M>(mode));
+    }
+};
+
+struct opponent_info_fn {
+    template <typename M>
+    constexpr auto operator()(M &&mode) const
+        noexcept(noexcept(tag_invoke(__tag::opponent_info_t{},
+                                     std::forward<M>(mode))))
+            -> decltype(auto) {
+        return tag_invoke(__tag::opponent_info_t{}, std::forward<M>(mode));
+    }
+};
+
 struct process_combat_tick_fn {
     template <typename M>
     constexpr auto operator()(M &&mode) const
@@ -335,6 +368,8 @@ inline constexpr __fn::join_multiplayer_fn join_multiplayer{};
 inline constexpr __fn::leave_game_fn leave_game{};
 inline constexpr __fn::poll_mode_fn poll_mode{};
 inline constexpr __fn::start_combat_fn start_combat{};
+inline constexpr __fn::cancel_ready_fn cancel_ready{};
+inline constexpr __fn::opponent_info_fn opponent_info{};
 inline constexpr __fn::process_combat_tick_fn process_combat_tick{};
 inline constexpr __fn::acknowledge_result_fn acknowledge_result{};
 inline constexpr __fn::on_session_loaded_fn on_session_loaded{};

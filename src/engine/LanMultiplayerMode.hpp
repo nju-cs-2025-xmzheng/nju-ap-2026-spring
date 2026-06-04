@@ -33,6 +33,14 @@ class LanMultiplayerMode {
     int ticks_elapsed_ = 0;
     int remote_hp_after_ = 100;
 
+    // Client-side cache of the opponent (host) summary, fed by "OPP" messages.
+    // The host reads the opponent straight off remote_session_ instead.
+    bool opp_available_ = false;
+    int opp_hp_ = 100;
+    int opp_gold_ = 0;
+    int opp_level_ = 1;
+    int opp_round_ = 1;
+
     LanMultiplayerMode() {
         clear_enemy_half(session_.board_);
         clear_enemy_half(remote_session_.board_);
@@ -64,6 +72,11 @@ class LanMultiplayerMode {
         player_won_game_ = false;
         ticks_elapsed_ = 0;
         remote_hp_after_ = 100;
+        opp_available_ = false;
+        opp_hp_ = 100;
+        opp_gold_ = 0;
+        opp_level_ = 1;
+        opp_round_ = 1;
     }
 
     friend constexpr ModeKind
@@ -252,6 +265,45 @@ class LanMultiplayerMode {
             "Ready. Waiting for opponent...", 3.0f, false, false, false, false};
     }
 
+    // Withdraw a pending ready-up while still waiting for the opponent. Once
+    // both players are ready the host begins combat immediately, so there is no
+    // window to cancel after that.
+    friend ModeUpdate tag_invoke(__tag::cancel_ready_t,
+                                 LanMultiplayerMode &mode) {
+        if (!mode.local_ready_ || mode.is_combat_ || mode.result_announced_) {
+            return {};
+        }
+        mode.local_ready_ = false;
+        if (mode.kind_ == ModeKind::LanClient) {
+            mode.send_command("UNREADY");
+        } else {
+            mode.send_command("PEERUNREADY");
+        }
+        return {"Ready canceled. Adjust your board.",
+                2.0f,
+                false,
+                false,
+                false,
+                false};
+    }
+
+    friend OpponentInfo tag_invoke(__tag::opponent_info_t,
+                                   const LanMultiplayerMode &mode) {
+        if (!mode.connected_) {
+            return OpponentInfo{};
+        }
+        if (mode.kind_ == ModeKind::LanHost) {
+            return OpponentInfo{true,
+                                mode.remote_session_.player_.hp,
+                                mode.remote_session_.player_.gold,
+                                mode.remote_session_.player_.level,
+                                mode.remote_session_.round_,
+                                mode.remote_ready_};
+        }
+        return OpponentInfo{mode.opp_available_, mode.opp_hp_,    mode.opp_gold_,
+                            mode.opp_level_,     mode.opp_round_, mode.remote_ready_};
+    }
+
     friend ModeUpdate tag_invoke(__tag::process_combat_tick_t,
                                  LanMultiplayerMode &mode) {
         if (mode.kind_ == ModeKind::LanClient || !mode.is_combat_ ||
@@ -314,7 +366,9 @@ class LanMultiplayerMode {
         mode.is_combat_ = false;
         mode.local_ready_ = false;
         mode.combat_result_ = CombatResult::Ongoing;
-        if (!mode.connected_) {
+        if (mode.connected_) {
+            mode.send_opponent_summary();
+        } else {
             update.status = "Multiplayer connection closed.";
         }
         return update;
@@ -428,7 +482,9 @@ class LanMultiplayerMode {
     friend ModeUpdate tag_invoke(__tag::act_sell_t, LanMultiplayerMode &mode,
                                  Coord at) {
         if (mode.kind_ == ModeKind::LanHost) {
-            return apply_sell(mode.session_, at);
+            ModeUpdate update = apply_sell(mode.session_, at);
+            mode.send_opponent_summary();
+            return update;
         }
         mode.send_command("SELL " + encode_coord(at));
         return {};
@@ -447,7 +503,9 @@ class LanMultiplayerMode {
     friend ModeUpdate tag_invoke(__tag::act_buy_t, LanMultiplayerMode &mode,
                                  int slot) {
         if (mode.kind_ == ModeKind::LanHost) {
-            return apply_buy(mode.session_, slot);
+            ModeUpdate update = apply_buy(mode.session_, slot);
+            mode.send_opponent_summary();
+            return update;
         }
         mode.send_command("BUY " + std::to_string(slot));
         return {};
@@ -456,7 +514,9 @@ class LanMultiplayerMode {
     friend ModeUpdate tag_invoke(__tag::act_refresh_t,
                                  LanMultiplayerMode &mode) {
         if (mode.kind_ == ModeKind::LanHost) {
-            return apply_refresh(mode.session_);
+            ModeUpdate update = apply_refresh(mode.session_);
+            mode.send_opponent_summary();
+            return update;
         }
         mode.send_command("REFRESH");
         return {};
@@ -473,7 +533,9 @@ class LanMultiplayerMode {
 
     friend ModeUpdate tag_invoke(__tag::act_level_t, LanMultiplayerMode &mode) {
         if (mode.kind_ == ModeKind::LanHost) {
-            return apply_level(mode.session_);
+            ModeUpdate update = apply_level(mode.session_);
+            mode.send_opponent_summary();
+            return update;
         }
         mode.send_command("LEVEL");
         return {};
@@ -544,6 +606,15 @@ class LanMultiplayerMode {
         if (verb == "READY") {
             return host_handle_remote_ready();
         }
+        if (verb == "UNREADY") {
+            remote_ready_ = false;
+            return {"Opponent canceled ready.",
+                    2.5f,
+                    false,
+                    false,
+                    false,
+                    false};
+        }
         if (verb == "ACK") {
             return host_handle_remote_ack();
         }
@@ -595,6 +666,33 @@ class LanMultiplayerMode {
                     false,
                     false,
                     false};
+        }
+
+        if (header == "PEERUNREADY") {
+            remote_ready_ = false;
+            return {"Opponent canceled ready.",
+                    2.5f,
+                    false,
+                    false,
+                    false,
+                    false};
+        }
+
+        if (header.starts_with("OPP ")) {
+            std::istringstream opp_in(header);
+            std::string command;
+            int hp = 0;
+            int gold = 0;
+            int level = 0;
+            int round = 0;
+            if (opp_in >> command >> hp >> gold >> level >> round) {
+                opp_available_ = true;
+                opp_hp_ = hp;
+                opp_gold_ = gold;
+                opp_level_ = level;
+                opp_round_ = round;
+            }
+            return {};
         }
 
         if (header.starts_with("STATE")) {
@@ -751,6 +849,17 @@ class LanMultiplayerMode {
     void send_state() {
         network::send_text(connection_, "STATE\n" + serialize_session_to_string(
                                                         remote_session_));
+        send_opponent_summary();
+    }
+
+    // Host -> client: a compact view of the host's own player so the client can
+    // render the opponent panel. Sent alongside every STATE push and after the
+    // host's own economy changes.
+    void send_opponent_summary() {
+        send_command("OPP " + std::to_string(session_.player_.hp) + " " +
+                     std::to_string(session_.player_.gold) + " " +
+                     std::to_string(session_.player_.level) + " " +
+                     std::to_string(session_.round_));
     }
 
     void send_board(const std::string &header, const Board &board) {

@@ -152,6 +152,22 @@ class GameModeController {
         return start_combat(controller.multiplayer_);
     }
 
+    friend ModeUpdate tag_invoke(__tag::cancel_ready_t,
+                                 GameModeController &controller) {
+        if (controller.active_ == ModeKind::SinglePlayer) {
+            return cancel_ready(controller.single_);
+        }
+        return cancel_ready(controller.multiplayer_);
+    }
+
+    friend OpponentInfo tag_invoke(__tag::opponent_info_t,
+                                   const GameModeController &controller) {
+        if (controller.active_ == ModeKind::SinglePlayer) {
+            return opponent_info(controller.single_);
+        }
+        return opponent_info(controller.multiplayer_);
+    }
+
     friend ModeUpdate tag_invoke(__tag::process_combat_tick_t,
                                  GameModeController &controller) {
         if (controller.active_ == ModeKind::SinglePlayer) {

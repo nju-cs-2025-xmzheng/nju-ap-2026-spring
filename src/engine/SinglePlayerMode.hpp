@@ -135,6 +135,16 @@ class SinglePlayerMode {
                 false};
     }
 
+    // Single-player has no ready handshake and no opponent player.
+    friend ModeUpdate tag_invoke(__tag::cancel_ready_t, SinglePlayerMode &) {
+        return {};
+    }
+
+    friend OpponentInfo tag_invoke(__tag::opponent_info_t,
+                                   const SinglePlayerMode &) noexcept {
+        return OpponentInfo{};
+    }
+
     friend ModeUpdate tag_invoke(__tag::process_combat_tick_t,
                                  SinglePlayerMode &mode) {
         if (!mode.is_combat_ || mode.result_announced_) {

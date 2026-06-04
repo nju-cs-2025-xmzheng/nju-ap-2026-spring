@@ -52,6 +52,16 @@ constexpr float ShopBlockX(int p) {
 
 constexpr float ShopRowY() { return ShopPanelBounds().y + kShopPad; }
 
+// Drop zone for selling a dragged unit: a wide bottom strip at the shop's
+// height. Same as the shop panel but with its left edge pushed left to a small
+// margin (mirroring the shop's right margin); top/right/bottom unchanged, so
+// releasing anywhere along the bottom sells.
+constexpr Rectangle SellZoneBounds() {
+    Rectangle s = ShopPanelBounds();
+    constexpr float left = 16.0f;
+    return Rectangle{left, s.y, s.x + s.width - left, s.height};
+}
+
 engine::ConnectionConfig ParseMultiplayerAddress(const std::string &input) {
     std::string host = kDefaultMultiplayerHost;
     std::string port_text = std::to_string(kDefaultMultiplayerPort);
@@ -1363,7 +1373,7 @@ void GameApp::HandleInputs() {
     if (is_dragging_ && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         is_dragging_ = false;
         Vector2 mouse_pos = GetMousePosition();
-        if (CheckCollisionPointRec(mouse_pos, ShopPanelBounds())) {
+        if (CheckCollisionPointRec(mouse_pos, SellZoneBounds())) {
             if (get_unit(engine::session(mode_).board_, drag_source_)) {
                 ApplyModeUpdate(engine::act_sell(mode_, drag_source_));
                 if (has_selection_ && selected_coord_ == drag_source_) {
@@ -1817,110 +1827,20 @@ void GameApp::DrawGame2D() {
         engine::mode_kind(mode_) != engine::ModeKind::SinglePlayer;
     bool local_ready = is_multiplayer && mode_.multiplayer_.local_ready_;
 
-    // 1. Top HUD as three floating pieces: MENU (left), economy readout
-    // (middle), phase/ready button (right). Player & opponent HP live in the
-    // right-hand sidebar now (drawn later, after the ready-dim overlay).
+    // Shared width/right-edge for the MENU button, the phase/ready button and
+    // the HP sidebar so they line up. Computed here; the top bar itself is
+    // drawn later (after the dim) so it floats bright over the shadow.
     const int top_y = 12;
     const int top_h = 36;
-    Vector2 mouse_top = GetMousePosition();
-
-    auto draw_floating = [&](Rectangle r, Color bg) {
-        DrawRectangleRounded(r, 0.3f, 6, bg);
-        DrawRectangleRoundedLinesEx(r, 0.3f, 6, 1.0f, Color{50, 50, 60, 255});
-    };
-
-    // -- Left: exit to main menu --
-    Rectangle exit_btn{14.0f, (float)top_y, 96.0f, (float)top_h};
-    bool exit_hover = CheckCollisionPointRec(mouse_top, exit_btn);
-    draw_floating(exit_btn,
-                  exit_hover ? Color{70, 44, 48, 255} : Color{24, 22, 26, 235});
-    {
-        int tw = MeasureGameText("MENU", 16, true);
-        DrawGameText("MENU", (int)(exit_btn.x + exit_btn.width / 2 - tw / 2),
-                     top_y + 9, 16, exit_hover ? WHITE : LIGHTGRAY, true);
-    }
-    if (exit_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        state_ = GameState::MainMenu;
-        menu_transition_cooldown_ = 0.2f;
-        is_slot_menu_ = false;
-        has_selection_ = false;
-        is_dragging_ = false;
-        has_hover_ = false;
-        hovered_equip_index_ = -1;
-        selected_equip_index_ = -1;
-        is_dragging_equip_ = false;
-        drag_equip_source_index_ = -1;
-    }
-
-    // -- Middle: GOLD / LEVEL / ROUND --
-    int board_units = 0;
-    for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
-        for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
-            if (auto u = get_unit(engine::is_combat(mode_)
-                                      ? engine::active_board(mode_)
-                                      : engine::session(mode_).board_,
-                                  engine::HexCoord{r, c})) {
-                if (unit::stats(*u).owner == unit::Owner::PlayerCtrl)
-                    board_units++;
-            }
-        }
-    }
-    Rectangle mid{430.0f, (float)top_y, 420.0f, (float)top_h};
-    draw_floating(mid, Color{20, 20, 24, 235});
-    int mid_ty = top_y + 9;
-    DrawGameText("GOLD", 452, mid_ty, 16, LIGHTGRAY);
-    DrawGameText(std::to_string(engine::session(mode_).player_.gold).c_str(),
-                 512, mid_ty, 16, GOLD);
-    DrawGameText("LEVEL", 580, mid_ty, 16, LIGHTGRAY);
-    std::string lvl_txt =
-        std::to_string(engine::session(mode_).player_.level) + " (" +
-        std::to_string(board_units) + "/" +
-        std::to_string(engine::session(mode_).player_.level) + ")";
-    DrawGameText(lvl_txt.c_str(), 645, mid_ty, 16, SKYBLUE);
-    DrawGameText("ROUND", 745, mid_ty, 16, LIGHTGRAY);
-    DrawGameText(std::to_string(engine::session(mode_).round_).c_str(), 810,
-                 mid_ty, 16, WHITE);
-
-    // -- Right: phase / ready button --
-    const float rb_w = 196.0f;
-    const float rb_x = 1280.0f - rb_w - 14.0f;
-    Rectangle ready_btn{rb_x, (float)top_y, rb_w, (float)top_h};
-    if (engine::is_combat(mode_)) {
-        draw_floating(ready_btn, Color{150, 40, 40, 255});
-        int tw = MeasureGameText("COMBAT", 16, true);
-        DrawGameText("COMBAT", (int)(rb_x + rb_w / 2 - tw / 2), top_y + 9, 16,
-                     WHITE, true);
-    } else {
-        std::string button_text = "START COMBAT";
-        if (is_multiplayer) {
-            int ready_count = (mode_.multiplayer_.local_ready_ ? 1 : 0) +
-                              (mode_.multiplayer_.remote_ready_ ? 1 : 0);
-            // When already readied the button toggles to CANCEL so the player
-            // can keep editing while waiting for the opponent.
-            button_text = (local_ready ? "CANCEL (" : "READY (") +
-                          std::to_string(ready_count) + "/2)";
-        }
-        bool hover = CheckCollisionPointRec(mouse_top, ready_btn);
-        Color btn_color;
-        if (local_ready) {
-            btn_color =
-                hover ? Color{200, 140, 40, 255} : Color{160, 110, 30, 255};
-        } else {
-            btn_color =
-                hover ? Color{40, 140, 55, 255} : Color{30, 110, 45, 255};
-        }
-        draw_floating(ready_btn, btn_color);
-        int tw = MeasureGameText(button_text.c_str(), 16, true);
-        DrawGameText(button_text.c_str(), (int)(rb_x + rb_w / 2 - tw / 2),
-                     top_y + 9, 16, WHITE, true);
-        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            if (local_ready) {
-                ApplyModeUpdate(engine::cancel_ready(mode_));
-            } else {
-                StartCombatPhase();
-            }
-        }
-    }
+    std::string size_label =
+        engine::is_combat(mode_)
+            ? "COMBAT"
+            : (is_multiplayer ? "CANCEL (1/2)" : "START COMBAT");
+    float panel_w = MeasureGameText(size_label.c_str(), 16, true) + 32.0f;
+    float hp_need = 8.0f + MeasureGameText("OPPONENT", 12, false) + 12.0f +
+                    MeasureGameText("100/100", 11, false) + 8.0f;
+    panel_w = std::max(panel_w, hp_need);
+    const float right_x = 1280.0f - panel_w - 14.0f;
 
     // 2. Draw Status Message banner
     if (status_msg_timer_ > 0.0f) {
@@ -1938,108 +1858,8 @@ void GameApp::DrawGame2D() {
     Color tip_accent = WHITE;
     Vector2 mouse = GetMousePosition();
 
-    // 3. Draw Active Synergies as circular elemental icons with ring progress
-    auto active_synergies = unit::compute_synergies(
-        engine::is_combat(mode_) ? engine::active_board(mode_)
-                                 : engine::session(mode_).board_);
-
-    // Vertical column of circular icons on the left edge
-    float sy_y = 150.0f;
-    auto draw_synergy_item = [&](Texture2D icon, const char *name,
-                                 const char *desc, int count, int threshold,
-                                 bool active, Color col) {
-        Vector2 center{44.0f, sy_y + 22.0f};
-        const float outer = 20.0f;
-        const float inner = 17.0f;
-
-        float progress = threshold > 0
-                             ? std::min(1.0f, (float)count / (float)threshold)
-                             : 0.0f;
-
-        // Soft outer glow when active
-        if (active)
-            DrawCircleGradient((int)center.x, (int)center.y, outer + 6.0f,
-                               Fade(col, 0.35f), Fade(col, 0.0f));
-
-        // Inner disc background
-        DrawCircle((int)center.x, (int)center.y, outer,
-                   active ? Fade(col, 0.30f) : Color{24, 24, 30, 230});
-
-        // Background track ring (full circle)
-        DrawRing(center, inner, outer, 0.0f, 360.0f, 64,
-                 Color{38, 38, 46, 255});
-
-        // Progress ring, filling clockwise from the top
-        if (progress > 0.0f)
-            DrawRing(center, inner, outer, -90.0f, -90.0f + 360.0f * progress,
-                     64, active ? col : Fade(col, 0.5f));
-
-        // Elemental icon, tinted by state
-        if (icon.id != 0) {
-            float icon_sz = inner * 1.5f;
-            Rectangle src{0, 0, (float)icon.width, (float)icon.height};
-            Rectangle dst{center.x - icon_sz / 2.0f, center.y - icon_sz / 2.0f,
-                          icon_sz, icon_sz};
-            Color tint = active ? WHITE : Color{120, 120, 132, 220};
-            DrawTexturePro(icon, src, dst, {0, 0}, 0.0f, tint);
-        }
-
-        // Hover -> capture an enlarged tooltip describing this resonance
-        if (CheckCollisionPointCircle(mouse, center, outer)) {
-            tip_show = true;
-            tip_accent = col;
-            tip_title = name;
-            tip_lines = {
-                desc,
-                "Units: " + std::to_string(count) + " / " +
-                    std::to_string(threshold),
-                active ? "Status: ACTIVE"
-                       : "Status: inactive (need " + std::to_string(threshold) +
-                             ")",
-            };
-        }
-
-        sy_y += 52.0f;
-    };
-
-    draw_synergy_item(
-        element_icons_[(int)unit::Element::Pyro], "Fervent Flames",
-        "Pyro units gain +25% ATK.", active_synergies.pyro_count, 2,
-        active_synergies.fervent_flames, Color{255, 110, 70, 255});
-    draw_synergy_item(
-        element_icons_[(int)unit::Element::Hydro], "Soothing Water",
-        "Hydro units gain +25% Max HP.", active_synergies.hydro_count, 2,
-        active_synergies.soothing_water, Color{70, 150, 255, 255});
-    draw_synergy_item(
-        element_icons_[(int)unit::Element::Anemo], "Impetuous Winds",
-        "Anemo units get -15 Max Mana (faster skills).",
-        active_synergies.anemo_count, 2, active_synergies.impetuous_winds,
-        Color{90, 220, 180, 255});
-    draw_synergy_item(element_icons_[(int)unit::Element::Geo], "Enduring Rock",
-                      "Geo units gain +15% Shield and +15% DMG while shielded.",
-                      active_synergies.geo_count, 2,
-                      active_synergies.enduring_rock, Color{240, 190, 70, 255});
-    draw_synergy_item(element_icons_[(int)unit::Element::Electro],
-                      "High Voltage",
-                      "Electro units gain +5 mana on normal attacks.",
-                      active_synergies.electro_count, 2,
-                      active_synergies.high_voltage, Color{200, 130, 255, 255});
-    draw_synergy_item(
-        element_icons_[(int)unit::Element::Cryo], "Shattering Ice",
-        "Cryo normal attacks have a 20% chance to freeze.",
-        active_synergies.cryo_count, 2, active_synergies.shattering_ice,
-        Color{160, 230, 255, 255});
-
-    // Four-element bond: count distinct elements present on the board
-    int unique_elements =
-        (active_synergies.pyro_count > 0) + (active_synergies.hydro_count > 0) +
-        (active_synergies.anemo_count > 0) + (active_synergies.geo_count > 0) +
-        (active_synergies.electro_count > 0) +
-        (active_synergies.cryo_count > 0);
-    draw_synergy_item(canopy_icon_, "Protective Canopy",
-                      "4+ distinct elements: your team takes -15% damage.",
-                      unique_elements, 4, active_synergies.protective_canopy,
-                      Color{120, 220, 130, 255});
+    // 3. (The synergy resonance column is drawn later, after the ready-dim
+    // overlay, so it stays bright — see DrawSynergyColumn below.)
 
     // 3b. Hovered equipment -> tooltip with its bonus
     if (!tip_show && hovered_equip_index_ >= 0 &&
@@ -2105,11 +1925,11 @@ void GameApp::DrawGame2D() {
 
     // 5. Draw the recruitment shop in the bottom-right corner. It collapses the
     // moment combat starts. The cards float on their own (no backing panel or
-    // title); ShopPanelBounds() is just the sell drop zone.
+    // title); the sell drop zone is the full bottom strip (SellZoneBounds()).
     if (!engine::is_combat(mode_)) {
-        Rectangle shop_panel = ShopPanelBounds();
         bool shop_frozen = engine::session(mode_).shop_frozen_;
-        // While frozen the shop is locked for the next round: no buy, no refresh.
+        // While frozen the shop is locked for the next round: no buy, no
+        // refresh.
         bool shop_buyable = can_prepare && !shop_frozen;
         float row_y = ShopRowY();
 
@@ -2141,7 +1961,8 @@ void GameApp::DrawGame2D() {
 
             // Star levels
             for (int s = 0; s < stats.level; ++s) {
-                DrawStar2D(x + 16.0f + s * 17.0f, y + 22.0f, 7.0f, 3.0f, YELLOW);
+                DrawStar2D(x + 16.0f + s * 17.0f, y + 22.0f, 7.0f, 3.0f,
+                           YELLOW);
             }
 
             // Element name
@@ -2165,8 +1986,9 @@ void GameApp::DrawGame2D() {
             std::string buy_lbl =
                 shop_frozen ? "LOCKED" : "BUY  " + std::to_string(cost) + "G";
             int buy_w = MeasureGameText(buy_lbl.c_str(), 14, true);
-            DrawGameText(buy_lbl.c_str(), (int)(buy.x + buy.width / 2 - buy_w / 2),
-                         (int)(buy.y + 8), 14, shop_buyable ? WHITE : GRAY, true);
+            DrawGameText(
+                buy_lbl.c_str(), (int)(buy.x + buy.width / 2 - buy_w / 2),
+                (int)(buy.y + 8), 14, shop_buyable ? WHITE : GRAY, true);
 
             if (buy_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 ApplyModeUpdate(engine::act_buy(mode_, slot));
@@ -2183,7 +2005,8 @@ void GameApp::DrawGame2D() {
                                     Color{55, 55, 65, 255});
 
         auto draw_action = [&](const char *text, float y, Color col,
-                               Color hover_col, bool enabled, auto action_func) {
+                               Color hover_col, bool enabled,
+                               auto action_func) {
             Rectangle b{action_x + 8, y, kShopCardW - 16, 30};
             bool hover =
                 enabled && CheckCollisionPointRec(GetMousePosition(), b);
@@ -2222,35 +2045,37 @@ void GameApp::DrawGame2D() {
                     can_prepare,
                     [&]() { ApplyModeUpdate(engine::act_level(mode_)); });
 
-        // Drag a board unit onto the shop area to sell it.
+        // Drag a board unit onto the bottom strip to sell it — releasing
+        // anywhere along it works (the strip spans full width at shop height).
         if (can_prepare && is_dragging_) {
-            bool over_shop =
-                CheckCollisionPointRec(GetMousePosition(), shop_panel);
+            Rectangle sell_zone = SellZoneBounds();
+            bool over_sell =
+                CheckCollisionPointRec(GetMousePosition(), sell_zone);
             auto src_u = get_unit(engine::session(mode_).board_, drag_source_);
             int price = 0;
             if (src_u) {
                 auto &stats = unit::stats(*src_u);
-                price = (stats.level == 1)
-                            ? 2
-                            : ((stats.level == 2) ? 5
-                                                  : ((stats.level == 3) ? 14
-                                                                        : 42));
+                price =
+                    (stats.level == 1)
+                        ? 2
+                        : ((stats.level == 2) ? 5
+                                              : ((stats.level == 3) ? 14 : 42));
             }
-            Color glow = over_shop ? RED : GOLD;
-            DrawRectangleRounded(shop_panel, 0.04f, 8,
-                                 Fade(glow, over_shop ? 0.22f : 0.10f));
-            DrawRectangleRoundedLinesEx(shop_panel, 0.04f, 8, 2.0f, glow);
+            Color glow = over_sell ? RED : GOLD;
+            DrawRectangleRounded(sell_zone, 0.04f, 8,
+                                 Fade(glow, over_sell ? 0.22f : 0.10f));
+            DrawRectangleRoundedLinesEx(sell_zone, 0.04f, 8, 2.0f, glow);
             std::string sell_text =
-                (over_shop ? "RELEASE TO SELL  +" : "DROP HERE TO SELL  +") +
+                (over_sell ? "RELEASE TO SELL  +" : "DRAG HERE TO SELL  +") +
                 std::to_string(price) + "G";
+            // Centre the prompt in the middle of the sell strip.
+            float cx = sell_zone.x + sell_zone.width / 2.0f;
             int tw = MeasureGameText(sell_text.c_str(), 18, true);
-            DrawRectangle(
-                (int)(shop_panel.x + shop_panel.width / 2 - tw / 2 - 12),
-                (int)(shop_panel.y + shop_panel.height / 2 - 16), tw + 24, 34,
-                Color{15, 15, 20, 235});
-            DrawGameText(sell_text.c_str(),
-                         (int)(shop_panel.x + shop_panel.width / 2 - tw / 2),
-                         (int)(shop_panel.y + shop_panel.height / 2 - 9), 18,
+            DrawRectangle((int)(cx - tw / 2 - 12),
+                          (int)(sell_zone.y + sell_zone.height / 2 - 16),
+                          tw + 24, 34, Color{15, 15, 20, 235});
+            DrawGameText(sell_text.c_str(), (int)(cx - tw / 2),
+                         (int)(sell_zone.y + sell_zone.height / 2 - 9), 18,
                          glow, true);
         }
     }
@@ -2351,26 +2176,237 @@ void GameApp::DrawGame2D() {
         }
     }
 
-    // 5.7 Dim the board while ready and waiting for the opponent (multiplayer).
-    // The top bar stays bright so the CANCEL button remains usable.
-    bool mp_waiting =
-        local_ready && !engine::is_combat(mode_) && !engine::result_announced(mode_);
-    if (mp_waiting) {
-        DrawRectangle(0, 60, 1280, 660, Fade(BLACK, 0.55f));
-        const char *wt = "WAITING FOR OPPONENT";
+    // 5.7 Dim the whole play field (board + shop) while readied-and-waiting, or
+    // while the connection has dropped. Covers the full screen, then the top
+    // bar, synergy column and HP sidebar are drawn on top so they stay bright.
+    bool mp_waiting = local_ready && !engine::is_combat(mode_) &&
+                      !engine::result_announced(mode_);
+    bool mp_lost = is_multiplayer && !mode_.multiplayer_.connected_;
+    if (mp_waiting || mp_lost) {
+        DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 0.55f));
+        const char *wt;
+        const char *sub;
+        if (mp_lost) {
+            wt = mode_.multiplayer_.reconnecting_ ? "RECONNECTING..."
+                                                  : "CONNECTION LOST";
+            sub = "Waiting for the opponent to reconnect.";
+        } else {
+            wt = "WAITING FOR OPPONENT";
+            sub = "Click CANCEL in the top bar to keep editing.";
+        }
         int ww = MeasureGameText(wt, 36, true);
-        DrawGameText(wt, 640 - ww / 2, 300, 36, GOLD, true);
-        const char *sub = "Click CANCEL in the top bar to keep editing.";
+        DrawGameText(wt, 640 - ww / 2, 300, 36, mp_lost ? RED : GOLD, true);
         int sw = MeasureGameText(sub, 18, false);
         DrawGameText(sub, 640 - sw / 2, 350, 18, LIGHTGRAY, false);
     }
 
-    // 5.8 Right-hand player sidebar: a compact name + HP entry per player, your
-    // own (green) on top, then any opponents. Drawn after the dim so it stays
-    // readable while waiting. Built as a list to allow more players later.
+    // 1 (deferred). Top HUD as three floating pieces — MENU (left, red),
+    // economy readout (middle), phase/ready button (right) — drawn here so it
+    // floats bright over the dim.
     {
-        const float side_w = 196.0f;
-        const float side_x = 1280.0f - side_w - 14.0f;
+        Vector2 mouse_top = GetMousePosition();
+        auto draw_floating = [&](Rectangle r, Color bg) {
+            DrawRectangleRounded(r, 0.3f, 6, bg);
+            DrawRectangleRoundedLinesEx(r, 0.3f, 6, 1.0f,
+                                        Color{50, 50, 60, 255});
+        };
+
+        // -- Left: exit to main menu (red by default) --
+        Rectangle exit_btn{14.0f, (float)top_y, panel_w, (float)top_h};
+        bool exit_hover = CheckCollisionPointRec(mouse_top, exit_btn);
+        draw_floating(exit_btn, exit_hover ? Color{180, 60, 60, 255}
+                                           : Color{130, 40, 44, 255});
+        {
+            int tw = MeasureGameText("MENU", 16, true);
+            DrawGameText("MENU",
+                         (int)(exit_btn.x + exit_btn.width / 2 - tw / 2),
+                         top_y + 9, 16, WHITE, true);
+        }
+        if (exit_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            state_ = GameState::MainMenu;
+            menu_transition_cooldown_ = 0.2f;
+            is_slot_menu_ = false;
+            has_selection_ = false;
+            is_dragging_ = false;
+            has_hover_ = false;
+            hovered_equip_index_ = -1;
+            selected_equip_index_ = -1;
+            is_dragging_equip_ = false;
+            drag_equip_source_index_ = -1;
+        }
+
+        // -- Middle: GOLD / LEVEL / ROUND --
+        int board_units = 0;
+        for (int r = 0; r < config::engine::BOARD_ROWS; ++r) {
+            for (int c = 0; c < config::engine::BOARD_COLS; ++c) {
+                if (auto u = get_unit(engine::is_combat(mode_)
+                                          ? engine::active_board(mode_)
+                                          : engine::session(mode_).board_,
+                                      engine::HexCoord{r, c})) {
+                    if (unit::stats(*u).owner == unit::Owner::PlayerCtrl)
+                        board_units++;
+                }
+            }
+        }
+        Rectangle mid{430.0f, (float)top_y, 420.0f, (float)top_h};
+        draw_floating(mid, Color{20, 20, 24, 235});
+        int mid_ty = top_y + 9;
+        DrawGameText("GOLD", 452, mid_ty, 16, LIGHTGRAY);
+        DrawGameText(
+            std::to_string(engine::session(mode_).player_.gold).c_str(), 512,
+            mid_ty, 16, GOLD);
+        DrawGameText("LEVEL", 580, mid_ty, 16, LIGHTGRAY);
+        std::string lvl_txt =
+            std::to_string(engine::session(mode_).player_.level) + " (" +
+            std::to_string(board_units) + "/" +
+            std::to_string(engine::session(mode_).player_.level) + ")";
+        DrawGameText(lvl_txt.c_str(), 645, mid_ty, 16, SKYBLUE);
+        DrawGameText("ROUND", 745, mid_ty, 16, LIGHTGRAY);
+        DrawGameText(std::to_string(engine::session(mode_).round_).c_str(), 810,
+                     mid_ty, 16, WHITE);
+
+        // -- Right: phase / ready button (shares panel_w with MENU + sidebar)
+        // --
+        Rectangle ready_btn{right_x, (float)top_y, panel_w, (float)top_h};
+        if (engine::is_combat(mode_)) {
+            draw_floating(ready_btn, Color{150, 40, 40, 255});
+            int tw = MeasureGameText("COMBAT", 16, true);
+            DrawGameText("COMBAT", (int)(right_x + panel_w / 2 - tw / 2),
+                         top_y + 9, 16, WHITE, true);
+        } else {
+            std::string button_text = "START COMBAT";
+            if (is_multiplayer) {
+                int ready_count = (mode_.multiplayer_.local_ready_ ? 1 : 0) +
+                                  (mode_.multiplayer_.remote_ready_ ? 1 : 0);
+                // Once readied the button toggles to CANCEL so the player can
+                // keep editing while waiting for the opponent.
+                button_text = (local_ready ? "CANCEL (" : "READY (") +
+                              std::to_string(ready_count) + "/2)";
+            }
+            bool hover = CheckCollisionPointRec(mouse_top, ready_btn);
+            Color btn_color;
+            if (local_ready) {
+                btn_color =
+                    hover ? Color{200, 140, 40, 255} : Color{160, 110, 30, 255};
+            } else {
+                btn_color =
+                    hover ? Color{40, 140, 55, 255} : Color{30, 110, 45, 255};
+            }
+            draw_floating(ready_btn, btn_color);
+            int tw = MeasureGameText(button_text.c_str(), 16, true);
+            DrawGameText(button_text.c_str(),
+                         (int)(right_x + panel_w / 2 - tw / 2), top_y + 9, 16,
+                         WHITE, true);
+            if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (local_ready) {
+                    ApplyModeUpdate(engine::cancel_ready(mode_));
+                } else {
+                    StartCombatPhase();
+                }
+            }
+        }
+    }
+
+    // 3 (deferred). Active synergies as a left-edge column of circular icons,
+    // drawn here so it stays bright over the dim. Hover captures a tooltip.
+    auto active_synergies = unit::compute_synergies(
+        engine::is_combat(mode_) ? engine::active_board(mode_)
+                                 : engine::session(mode_).board_);
+
+    float sy_y = 150.0f;
+    auto draw_synergy_item = [&](Texture2D icon, const char *name,
+                                 const char *desc, int count, int threshold,
+                                 bool active, Color col) {
+        Vector2 center{44.0f, sy_y + 22.0f};
+        const float outer = 20.0f;
+        const float inner = 17.0f;
+
+        float progress = threshold > 0
+                             ? std::min(1.0f, (float)count / (float)threshold)
+                             : 0.0f;
+
+        if (active)
+            DrawCircleGradient((int)center.x, (int)center.y, outer + 6.0f,
+                               Fade(col, 0.35f), Fade(col, 0.0f));
+        DrawCircle((int)center.x, (int)center.y, outer,
+                   active ? Fade(col, 0.30f) : Color{24, 24, 30, 230});
+        DrawRing(center, inner, outer, 0.0f, 360.0f, 64,
+                 Color{38, 38, 46, 255});
+        if (progress > 0.0f)
+            DrawRing(center, inner, outer, -90.0f, -90.0f + 360.0f * progress,
+                     64, active ? col : Fade(col, 0.5f));
+
+        if (icon.id != 0) {
+            float icon_sz = inner * 1.5f;
+            Rectangle src{0, 0, (float)icon.width, (float)icon.height};
+            Rectangle dst{center.x - icon_sz / 2.0f, center.y - icon_sz / 2.0f,
+                          icon_sz, icon_sz};
+            Color tint = active ? WHITE : Color{120, 120, 132, 220};
+            DrawTexturePro(icon, src, dst, {0, 0}, 0.0f, tint);
+        }
+
+        if (CheckCollisionPointCircle(mouse, center, outer)) {
+            tip_show = true;
+            tip_accent = col;
+            tip_title = name;
+            tip_lines = {
+                desc,
+                "Units: " + std::to_string(count) + " / " +
+                    std::to_string(threshold),
+                active ? "Status: ACTIVE"
+                       : "Status: inactive (need " + std::to_string(threshold) +
+                             ")",
+            };
+        }
+
+        sy_y += 52.0f;
+    };
+
+    draw_synergy_item(
+        element_icons_[(int)unit::Element::Pyro], "Fervent Flames",
+        "Pyro units gain +25% ATK.", active_synergies.pyro_count, 2,
+        active_synergies.fervent_flames, Color{255, 110, 70, 255});
+    draw_synergy_item(
+        element_icons_[(int)unit::Element::Hydro], "Soothing Water",
+        "Hydro units gain +25% Max HP.", active_synergies.hydro_count, 2,
+        active_synergies.soothing_water, Color{70, 150, 255, 255});
+    draw_synergy_item(
+        element_icons_[(int)unit::Element::Anemo], "Impetuous Winds",
+        "Anemo units get -15 Max Mana (faster skills).",
+        active_synergies.anemo_count, 2, active_synergies.impetuous_winds,
+        Color{90, 220, 180, 255});
+    draw_synergy_item(element_icons_[(int)unit::Element::Geo], "Enduring Rock",
+                      "Geo units gain +15% Shield and +15% DMG while shielded.",
+                      active_synergies.geo_count, 2,
+                      active_synergies.enduring_rock, Color{240, 190, 70, 255});
+    draw_synergy_item(element_icons_[(int)unit::Element::Electro],
+                      "High Voltage",
+                      "Electro units gain +5 mana on normal attacks.",
+                      active_synergies.electro_count, 2,
+                      active_synergies.high_voltage, Color{200, 130, 255, 255});
+    draw_synergy_item(
+        element_icons_[(int)unit::Element::Cryo], "Shattering Ice",
+        "Cryo normal attacks have a 20% chance to freeze.",
+        active_synergies.cryo_count, 2, active_synergies.shattering_ice,
+        Color{160, 230, 255, 255});
+
+    int unique_elements =
+        (active_synergies.pyro_count > 0) + (active_synergies.hydro_count > 0) +
+        (active_synergies.anemo_count > 0) + (active_synergies.geo_count > 0) +
+        (active_synergies.electro_count > 0) +
+        (active_synergies.cryo_count > 0);
+    draw_synergy_item(canopy_icon_, "Protective Canopy",
+                      "4+ distinct elements: your team takes -15% damage.",
+                      unique_elements, 4, active_synergies.protective_canopy,
+                      Color{120, 220, 130, 255});
+
+    // 5.8 Right-hand player sidebar: a compact name + HP entry per player, your
+    // own (green) on top, then any opponents. Shares the top bar's width and
+    // right edge. Drawn after the dim so it stays readable. A list to allow
+    // more players later.
+    {
+        const float side_w = panel_w;
+        const float side_x = right_x;
         const float entry_h = 34.0f;
         float entry_y = (float)top_y + (float)top_h + 10.0f; // below ready btn
 
@@ -2379,7 +2415,8 @@ void GameApp::DrawGame2D() {
             DrawRectangleRounded(e, 0.25f, 6, Color{16, 16, 20, 230});
             DrawRectangleRoundedLinesEx(e, 0.25f, 6, 1.0f,
                                         Color{45, 45, 55, 255});
-            DrawGameText(name, (int)side_x + 8, (int)entry_y + 3, 12, LIGHTGRAY);
+            DrawGameText(name, (int)side_x + 8, (int)entry_y + 3, 12,
+                         LIGHTGRAY);
 
             std::string hp_lbl = std::to_string(hp) + "/100";
             int hl_w = MeasureGameText(hp_lbl.c_str(), 11, false);

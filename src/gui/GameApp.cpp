@@ -1082,11 +1082,10 @@ void GameApp::DrawMultiplayerMenu() {
     DrawGameText(title, 640 - title_w / 2, 86, 48, GOLD, true);
 
     auto draw_btn = [&](const char *text, int x, int y, int w, bool enabled,
-                        ButtonVariant variant = ButtonVariant::Neutral)
-        -> bool {
-        return DrawButton(ButtonText(),
-                          {(float)x, (float)y, (float)w, 44.0f}, text,
-                          {variant, 18}, enabled,
+                        ButtonVariant variant =
+                            ButtonVariant::Neutral) -> bool {
+        return DrawButton(ButtonText(), {(float)x, (float)y, (float)w, 44.0f},
+                          text, {variant, 18}, enabled,
                           menu_transition_cooldown_ > 0.0f);
     };
 
@@ -1940,9 +1939,8 @@ void GameApp::DrawGame2D() {
         DrawRectangleRec(action_card, Color{28, 28, 34, 255});
         DrawRectangleLinesEx(action_card, 1.0f, Color{55, 55, 65, 255});
 
-        auto draw_action = [&](const char *text, float y,
-                               ButtonVariant variant, bool enabled,
-                               auto action_func) {
+        auto draw_action = [&](const char *text, float y, ButtonVariant variant,
+                               bool enabled, auto action_func) {
             Rectangle b{action_x + 8, y, kShopCardW - 16, 30};
             if (DrawButton(ButtonText(), b, text, {variant, 14}, enabled)) {
                 action_func();

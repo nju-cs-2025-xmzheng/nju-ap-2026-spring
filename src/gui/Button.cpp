@@ -40,13 +40,13 @@ constexpr Color kTextDisabled = GRAY;
 
 bool DrawButton(const TextRenderer &text, Rectangle bounds, const char *label,
                 ButtonStyle style, bool enabled, bool block_click) {
-    bool hover =
-        enabled && CheckCollisionPointRec(GetMousePosition(), bounds);
+    bool hover = enabled && CheckCollisionPointRec(GetMousePosition(), bounds);
 
     Palette palette = PaletteFor(style.variant);
-    Color fill = !enabled ? kFillDisabled
-                          : (hover ? palette.fill_hover : palette.fill);
-    Color border = !enabled ? kBorderDisabled : (hover ? kBorderHover : kBorder);
+    Color fill =
+        !enabled ? kFillDisabled : (hover ? palette.fill_hover : palette.fill);
+    Color border =
+        !enabled ? kBorderDisabled : (hover ? kBorderHover : kBorder);
     Color label_color = enabled ? kText : kTextDisabled;
 
     // Square corners only — no rounded rectangles anywhere.

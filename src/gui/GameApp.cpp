@@ -269,7 +269,6 @@ GameApp::GameApp() {
     input_style.paddingTop = 12.0f;
     input_style.paddingBottom = 12.0f;
     input_style.borderWidth = 1.0f;
-    input_style.borderRadius = 0.0f;
     input_style.bgNormal = Color{28, 28, 34, 255};
     input_style.bgHover = Color{28, 28, 34, 255};
     input_style.bgActive = Color{42, 48, 64, 255};
@@ -1897,9 +1896,8 @@ void GameApp::DrawGame2D() {
             float y = row_y;
             Rectangle card{x, y, kShopCardW, kShopCardH};
 
-            DrawRectangleRounded(card, 0.06f, 6, Color{28, 28, 34, 255});
-            DrawRectangleRoundedLinesEx(card, 0.06f, 6, 1.0f,
-                                        Color{55, 55, 65, 255});
+            DrawRectangleRec(card, Color{28, 28, 34, 255});
+            DrawRectangleLinesEx(card, 1.0f, Color{55, 55, 65, 255});
 
             auto &[unit, cost] = *engine::session(mode_).shop_[slot];
             Color col = GetElementColor(unit::element(unit));
@@ -1939,9 +1937,8 @@ void GameApp::DrawGame2D() {
         // button and stacked inside.
         float action_x = ShopBlockX(kShopCardCount);
         Rectangle action_card{action_x, row_y, kShopCardW, kShopCardH};
-        DrawRectangleRounded(action_card, 0.06f, 6, Color{28, 28, 34, 255});
-        DrawRectangleRoundedLinesEx(action_card, 0.06f, 6, 1.0f,
-                                    Color{55, 55, 65, 255});
+        DrawRectangleRec(action_card, Color{28, 28, 34, 255});
+        DrawRectangleLinesEx(action_card, 1.0f, Color{55, 55, 65, 255});
 
         auto draw_action = [&](const char *text, float y,
                                ButtonVariant variant, bool enabled,
@@ -1989,9 +1986,8 @@ void GameApp::DrawGame2D() {
                                               : ((stats.level == 3) ? 14 : 42));
             }
             Color glow = over_sell ? RED : GOLD;
-            DrawRectangleRounded(sell_zone, 0.04f, 8,
-                                 Fade(glow, over_sell ? 0.22f : 0.10f));
-            DrawRectangleRoundedLinesEx(sell_zone, 0.04f, 8, 2.0f, glow);
+            DrawRectangleRec(sell_zone, Fade(glow, over_sell ? 0.22f : 0.10f));
+            DrawRectangleLinesEx(sell_zone, 2.0f, glow);
             std::string sell_text =
                 (over_sell ? "RELEASE TO SELL  +" : "DRAG HERE TO SELL  +") +
                 std::to_string(price) + "G";
@@ -2322,9 +2318,8 @@ void GameApp::DrawGame2D() {
 
         auto draw_player_entry = [&](const char *name, int hp, Color accent) {
             Rectangle e{side_x, entry_y, side_w, entry_h};
-            DrawRectangleRounded(e, 0.25f, 6, Color{16, 16, 20, 230});
-            DrawRectangleRoundedLinesEx(e, 0.25f, 6, 1.0f,
-                                        Color{45, 45, 55, 255});
+            DrawRectangleRec(e, Color{16, 16, 20, 230});
+            DrawRectangleLinesEx(e, 1.0f, Color{45, 45, 55, 255});
             DrawGameText(name, (int)side_x + 8, (int)entry_y + 3, 12,
                          LIGHTGRAY);
 
@@ -2474,10 +2469,10 @@ void GameApp::DrawTooltipBox(const std::string &title,
     Rectangle box{bx, by, (float)box_w, (float)box_h};
 
     // Drop shadow, panel, accent border
-    DrawRectangleRounded({bx + 5, by + 6, box.width, box.height}, 0.05f, 8,
-                         Fade(BLACK, 0.45f));
-    DrawRectangleRounded(box, 0.05f, 8, Color{18, 18, 24, 248});
-    DrawRectangleRoundedLinesEx(box, 0.05f, 8, 2.0f, accent);
+    DrawRectangleRec({bx + 5, by + 6, box.width, box.height},
+                     Fade(BLACK, 0.45f));
+    DrawRectangleRec(box, Color{18, 18, 24, 248});
+    DrawRectangleLinesEx(box, 2.0f, accent);
 
     int tx = (int)bx + pad;
     int ty = (int)by + pad;

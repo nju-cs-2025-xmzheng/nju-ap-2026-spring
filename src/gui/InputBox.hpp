@@ -17,8 +17,6 @@ struct InputBoxStyle {
     float paddingTop = 8.0f;
     float paddingBottom = 8.0f;
     float borderWidth = 1.0f;
-    float borderRadius =
-        0.0f; // Rounded corner radius (0.0 to 1.0 for DrawRectangleRounded)
 
     // Colors for the various states
     Color bgNormal = Color{28, 28, 34, 255};

@@ -652,15 +652,9 @@ void InputBox::Draw() {
         border = style_.borderHover;
     }
 
-    // Draw background & border
-    if (style_.borderRadius > 0.0f) {
-        DrawRectangleRounded(bounds_, style_.borderRadius, 4, bg);
-        DrawRectangleRoundedLinesEx(bounds_, style_.borderRadius, 4,
-                                    style_.borderWidth, border);
-    } else {
-        DrawRectangleRec(bounds_, bg);
-        DrawRectangleLinesEx(bounds_, style_.borderWidth, border);
-    }
+    // Draw background & border (square corners only)
+    DrawRectangleRec(bounds_, bg);
+    DrawRectangleLinesEx(bounds_, style_.borderWidth, border);
 
     // Calculate visible viewport inside padding
     Rectangle viewport = {

@@ -2,6 +2,7 @@
 
 #include "engine/GameModeController.hpp"
 #include "gui/Button.hpp"
+#include "gui/Effects.hpp"
 #include "gui/InputBox.hpp"
 #include "raylib.h"
 #include "unit/UnitImpl.hpp" // IWYU pragma: keep
@@ -28,17 +29,6 @@ struct VisualSlime {
     engine::Coord last_coord = engine::HexCoord{-1, -1};
     bool initialized = false;
     bool was_dragged = false;
-};
-
-struct VisualProjectile {
-    Vector3 current_pos;
-    Vector3 target_pos;
-    float speed;
-    float progress = 0.0f;
-    Color color;
-    float radius;
-    bool is_area = false; // if true, it expands as an expanding ring at target
-    float max_radius = 1.5f;
 };
 
 enum class GameState {
@@ -110,7 +100,7 @@ class GameApp {
 
     // Animation maps and lists
     std::map<std::shared_ptr<unit::Unit>, VisualSlime> slimes_;
-    std::vector<VisualProjectile> projectiles_;
+    EffectSystem effects_;
 
     // Game state tracking
     float combat_tick_timer = 0.0f;

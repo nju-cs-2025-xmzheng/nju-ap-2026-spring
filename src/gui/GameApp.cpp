@@ -417,7 +417,7 @@ void GameApp::ApplyModeUpdate(const engine::ModeUpdate &update) {
     }
     if (update.clear_visuals) {
         slimes_.clear();
-        projectiles_.clear();
+        effects_.Clear();
     }
     if (update.enter_gameplay) {
         game_in_progress_ = true;
@@ -714,6 +714,16 @@ void GameApp::Update() {
                                     GetHexWorldPos(*target_opt);
                                 v.attack_dir = Vector3Normalize(
                                     Vector3Subtract(target_pos, wpos));
+                                // Ranged units sling an orb at their target;
+                                // melee units just lunge.
+                                if (stats.range > 1) {
+                                    Vector3 from = wpos;
+                                    from.y += 0.4f;
+                                    target_pos.y += 0.4f;
+                                    effects_.SpawnAttack(
+                                        GetElementColor(unit::element(*u_ptr)),
+                                        from, target_pos);
+                                }
                             } else {
                                 v.attack_dir = {0.0f, 0.0f, -1.0f};
                             }
@@ -724,21 +734,17 @@ void GameApp::Update() {
                     if (stats.mana < v.last_mana &&
                         v.last_mana >= stats.max_mana) {
                         v.cast_time = 0.0f;
-                        // Spawn skill particle
+                        // Spawn the element-appropriate skill effect.
                         if (auto target_opt =
                                 select_target(active_board, *u_ptr, coord)) {
-                            VisualProjectile proj;
-                            proj.current_pos = wpos;
-                            proj.current_pos.y += 0.4f;
-                            proj.target_pos = GetHexWorldPos(*target_opt);
-                            proj.target_pos.y += 0.4f;
-                            proj.speed = 4.0f;
-                            proj.color = GetElementColor(unit::element(*u_ptr));
-                            proj.radius = 0.15f;
-                            proj.is_area =
-                                (unit::element(*u_ptr) == unit::Element::Pyro ||
-                                 unit::element(*u_ptr) == unit::Element::Cryo);
-                            projectiles_.push_back(proj);
+                            Vector3 from = wpos;
+                            from.y += 0.4f;
+                            Vector3 to = GetHexWorldPos(*target_opt);
+                            to.y += 0.4f;
+                            effects_.SpawnSkill(
+                                unit::element(*u_ptr),
+                                GetElementColor(unit::element(*u_ptr)), from,
+                                to);
                         }
                     }
                     v.last_mana = stats.mana;
@@ -809,38 +815,8 @@ void GameApp::Update() {
         }
     }
 
-    // 7. Update active projectiles
-    for (auto it = projectiles_.begin(); it != projectiles_.end();) {
-        it->progress += dt * it->speed;
-        if (it->progress >= 1.0f) {
-            if (it->is_area) {
-                // Trigger area explosion ring animation
-                it->current_pos = it->target_pos;
-                it->progress = 0.99f; // stays at target
-                it->is_area = false;  // complete traveling
-                it->speed = 2.0f;     // expansion speed
-                it->radius = 0.1f;    // start size
-                // we'll let it expand for a few frames
-            }
-            if (it->progress >= 1.0f) {
-                it = projectiles_.erase(it);
-                continue;
-            }
-        }
-
-        if (!it->is_area && it->progress < 1.0f) {
-            it->current_pos =
-                Vector3Lerp(it->current_pos, it->target_pos, it->progress);
-        } else {
-            // Expand ring
-            it->radius += dt * it->speed * it->max_radius;
-            if (it->radius >= it->max_radius) {
-                it = projectiles_.erase(it);
-                continue;
-            }
-        }
-        ++it;
-    }
+    // 7. Update active projectiles and skill VFX
+    effects_.Update(dt);
 }
 
 void GameApp::UpdateStartMenu() {
@@ -1649,20 +1625,8 @@ void GameApp::DrawGame3D() {
         }
     }
 
-    // 5. Draw active Projectiles and VFX rings
-    for (const auto &proj : projectiles_) {
-        if (!proj.is_area) {
-            DrawSphere(proj.current_pos, proj.radius, proj.color);
-            DrawSphereWires(proj.current_pos, proj.radius + 0.02f, 8, 8,
-                            Fade(proj.color, 0.4f));
-        } else {
-            // Draw skill blast expansion ring
-            DrawCylinderWires(
-                proj.current_pos, proj.radius, proj.radius, 0.05f, 16,
-                Fade(proj.color,
-                     0.8f * (1.0f - proj.radius / proj.max_radius)));
-        }
-    }
+    // 5. Draw active Projectiles and skill VFX
+    effects_.Draw();
 }
 
 void GameApp::DrawHexCell(const Vector3 &pos, Color color, bool highlight) {

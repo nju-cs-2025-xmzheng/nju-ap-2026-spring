@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/GameModeController.hpp"
+#include "gui/Button.hpp"
 #include "gui/InputBox.hpp"
 #include "raylib.h"
 #include "unit/UnitImpl.hpp" // IWYU pragma: keep
@@ -101,6 +102,9 @@ class GameApp {
                         const std::vector<std::string> &lines, Color accent,
                         Vector2 anchor);
 
+    // Adapter that lets the shared button module render text through our fonts.
+    const TextRenderer &ButtonText();
+
   private:
     engine::GameModeController mode_;
 
@@ -154,6 +158,7 @@ class GameApp {
     bool is_saving_mode_ = false;
     bool exit_flag_ = false;
     float menu_transition_cooldown_ = 0.0f;
+    TextRenderer button_text_;
     InputBox multiplayer_address_input_;
     std::string multiplayer_status_;
     MultiplayerMenuState multiplayer_menu_state_ = MultiplayerMenuState::Setup;

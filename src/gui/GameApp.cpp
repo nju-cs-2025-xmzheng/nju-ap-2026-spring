@@ -898,28 +898,10 @@ void GameApp::DrawMainMenu() {
     }
 
     auto draw_menu_btn = [&](const char *text, int y, bool enabled) -> bool {
-        int x = 640 - 140;
-        int w = 280;
-        int h = 45;
-        bool hover = enabled && CheckCollisionPointRec(
-                                    GetMousePosition(),
-                                    {(float)x, (float)y, (float)w, (float)h});
-
-        Color base_color =
-            hover ? Color{50, 60, 90, 255} : Color{30, 30, 38, 255};
-        Color border_color = enabled ? (hover ? GOLD : Color{80, 80, 100, 255})
-                                     : Color{50, 50, 55, 255};
-        Color text_color = enabled ? (hover ? WHITE : LIGHTGRAY) : GRAY;
-
-        DrawRectangle(x, y, w, h, base_color);
-        DrawRectangleLines(x, y, w, h, border_color);
-
-        int text_w = MeasureGameText(text, 18, true);
-        DrawGameText(text, x + w / 2 - text_w / 2, y + 13, 18, text_color,
-                     true);
-
-        return hover && (menu_transition_cooldown_ <= 0.0f) &&
-               IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+        return DrawButton(ButtonText(),
+                          {(float)(640 - 140), (float)y, 280.0f, 45.0f}, text,
+                          {ButtonVariant::Neutral, 18}, enabled,
+                          menu_transition_cooldown_ > 0.0f);
     };
 
     if (is_slot_menu_) {
@@ -946,23 +928,11 @@ void GameApp::DrawMainMenu() {
             int slot_h = 45;
 
             // Draw slot button
-            bool slot_hover = CheckCollisionPointRec(
-                GetMousePosition(),
-                {(float)slot_x, (float)slot_y, (float)slot_w, (float)slot_h});
-            Color slot_base =
-                slot_hover ? Color{50, 60, 90, 255} : Color{30, 30, 38, 255};
-            Color slot_border = slot_hover ? GOLD : Color{80, 80, 100, 255};
-            Color slot_text_color = slot_hover ? WHITE : LIGHTGRAY;
-
-            DrawRectangle(slot_x, slot_y, slot_w, slot_h, slot_base);
-            DrawRectangleLines(slot_x, slot_y, slot_w, slot_h, slot_border);
-
-            int text_w = MeasureGameText(label.c_str(), 14, true);
-            DrawGameText(label.c_str(), slot_x + slot_w / 2 - text_w / 2,
-                         slot_y + 15, 14, slot_text_color, true);
-
-            if (slot_hover && (menu_transition_cooldown_ <= 0.0f) &&
-                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (DrawButton(ButtonText(),
+                           {(float)slot_x, (float)slot_y, (float)slot_w,
+                            (float)slot_h},
+                           label.c_str(), {ButtonVariant::Neutral, 14}, true,
+                           menu_transition_cooldown_ > 0.0f)) {
                 std::string file = std::string(GetApplicationDirectory()) +
                                    "save_slot_" + std::to_string(i) + ".txt";
                 if (is_saving_mode_) {
@@ -1003,22 +973,11 @@ void GameApp::DrawMainMenu() {
             if (meta.exists) {
                 int del_x = slot_x + slot_w + 10;
                 int del_w = 60;
-                bool del_hover = CheckCollisionPointRec(
-                    GetMousePosition(),
-                    {(float)del_x, (float)slot_y, (float)del_w, (float)slot_h});
-                Color del_base = del_hover ? Color{180, 50, 50, 255}
-                                           : Color{120, 30, 30, 255};
-                Color del_border = del_hover ? RED : Color{160, 50, 50, 255};
-
-                DrawRectangle(del_x, slot_y, del_w, slot_h, del_base);
-                DrawRectangleLines(del_x, slot_y, del_w, slot_h, del_border);
-
-                int del_text_w = MeasureGameText("DEL", 14, true);
-                DrawGameText("DEL", del_x + del_w / 2 - del_text_w / 2,
-                             slot_y + 15, 14, WHITE, true);
-
-                if (del_hover && (menu_transition_cooldown_ <= 0.0f) &&
-                    IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (DrawButton(ButtonText(),
+                               {(float)del_x, (float)slot_y, (float)del_w,
+                                (float)slot_h},
+                               "DEL", {ButtonVariant::Danger, 14}, true,
+                               menu_transition_cooldown_ > 0.0f)) {
                     std::string file = std::string(GetApplicationDirectory()) +
                                        "save_slot_" + std::to_string(i) +
                                        ".txt";
@@ -1123,23 +1082,13 @@ void GameApp::DrawMultiplayerMenu() {
     int title_w = MeasureGameText(title, 48, true);
     DrawGameText(title, 640 - title_w / 2, 86, 48, GOLD, true);
 
-    auto draw_btn = [&](const char *text, int x, int y, int w,
-                        bool enabled) -> bool {
-        int h = 44;
-        bool hover = enabled && CheckCollisionPointRec(
-                                    GetMousePosition(),
-                                    {(float)x, (float)y, (float)w, (float)h});
-        DrawRectangle(
-            x, y, w, h,
-            enabled ? (hover ? Color{50, 60, 90, 255} : Color{30, 30, 38, 255})
-                    : Color{35, 35, 40, 255});
-        DrawRectangleLines(x, y, w, h,
-                           enabled ? (hover ? GOLD : GRAY) : DARKGRAY);
-        int text_w = MeasureGameText(text, 18, true);
-        DrawGameText(text, x + w / 2 - text_w / 2, y + 12, 18,
-                     enabled ? WHITE : GRAY, true);
-        return hover && menu_transition_cooldown_ <= 0.0f &&
-               IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    auto draw_btn = [&](const char *text, int x, int y, int w, bool enabled,
+                        ButtonVariant variant = ButtonVariant::Neutral)
+        -> bool {
+        return DrawButton(ButtonText(),
+                          {(float)x, (float)y, (float)w, 44.0f}, text,
+                          {variant, 18}, enabled,
+                          menu_transition_cooldown_ > 0.0f);
     };
 
     auto leave_multiplayer_menu = [&]() {
@@ -1202,7 +1151,7 @@ void GameApp::DrawMultiplayerMenu() {
         return;
     }
 
-    if (draw_btn("HOST", 430, 315, 195, true)) {
+    if (draw_btn("HOST", 430, 315, 195, true, ButtonVariant::Primary)) {
         engine::ModeUpdate update = engine::host_multiplayer(
             mode_,
             ParseMultiplayerAddress(multiplayer_address_input_.GetValue()));
@@ -1213,7 +1162,7 @@ void GameApp::DrawMultiplayerMenu() {
                                   : "Waiting... (1/2)";
         multiplayer_address_input_.SetFocused(false);
     }
-    if (draw_btn("JOIN", 655, 315, 195, true)) {
+    if (draw_btn("JOIN", 655, 315, 195, true, ButtonVariant::Info)) {
         engine::ModeUpdate update = engine::join_multiplayer(
             mode_,
             ParseMultiplayerAddress(multiplayer_address_input_.GetValue()));
@@ -1977,20 +1926,10 @@ void GameApp::DrawGame2D() {
 
             // BUY button — shows the cost directly.
             Rectangle buy{x + 8, y + kShopCardH - 38, kShopCardW - 16, 30};
-            bool buy_hover =
-                shop_buyable && CheckCollisionPointRec(GetMousePosition(), buy);
-            Color buy_col = shop_buyable ? (buy_hover ? Color{40, 130, 70, 255}
-                                                      : Color{30, 90, 50, 255})
-                                         : Color{45, 45, 52, 255};
-            DrawRectangleRounded(buy, 0.3f, 6, buy_col);
             std::string buy_lbl =
                 shop_frozen ? "LOCKED" : "BUY  " + std::to_string(cost) + "G";
-            int buy_w = MeasureGameText(buy_lbl.c_str(), 14, true);
-            DrawGameText(
-                buy_lbl.c_str(), (int)(buy.x + buy.width / 2 - buy_w / 2.0f),
-                (int)(buy.y + 8), 14, shop_buyable ? WHITE : GRAY, true);
-
-            if (buy_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (DrawButton(ButtonText(), buy, buy_lbl.c_str(),
+                           {ButtonVariant::Primary, 14}, shop_buyable)) {
                 ApplyModeUpdate(engine::act_buy(mode_, slot));
             }
         }
@@ -2004,19 +1943,11 @@ void GameApp::DrawGame2D() {
         DrawRectangleRoundedLinesEx(action_card, 0.06f, 6, 1.0f,
                                     Color{55, 55, 65, 255});
 
-        auto draw_action = [&](const char *text, float y, Color col,
-                               Color hover_col, bool enabled,
+        auto draw_action = [&](const char *text, float y,
+                               ButtonVariant variant, bool enabled,
                                auto action_func) {
             Rectangle b{action_x + 8, y, kShopCardW - 16, 30};
-            bool hover =
-                enabled && CheckCollisionPointRec(GetMousePosition(), b);
-            DrawRectangleRounded(b, 0.3f, 6,
-                                 enabled ? (hover ? hover_col : col)
-                                         : Color{45, 45, 52, 255});
-            int text_w = MeasureGameText(text, 14, true);
-            DrawGameText(text, (int)(b.x + b.width / 2 - text_w / 2.0f),
-                         (int)(b.y + 8), 14, enabled ? WHITE : GRAY, true);
-            if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (DrawButton(ButtonText(), b, text, {variant, 14}, enabled)) {
                 action_func();
             }
         };
@@ -2026,23 +1957,19 @@ void GameApp::DrawGame2D() {
         float a_step = 41.0f;
 
         // Refresh — disabled while frozen.
-        draw_action("REFRESH 1G", a_y0, Color{140, 60, 30, 255},
-                    Color{180, 80, 40, 255}, shop_buyable,
+        draw_action("REFRESH 1G", a_y0, ButtonVariant::Warning, shop_buyable,
                     [&]() { ApplyModeUpdate(engine::act_refresh(mode_)); });
 
         // Freeze toggle — always available so the player can unfreeze.
-        draw_action(
-            shop_frozen ? "FROZEN" : "FREEZE", a_y0 + a_step,
-            shop_frozen ? Color{30, 144, 255, 255} : Color{20, 100, 130, 255},
-            shop_frozen ? Color{50, 190, 240, 255} : Color{30, 130, 170, 255},
-            can_prepare, [&]() { ApplyModeUpdate(engine::act_freeze(mode_)); });
+        draw_action(shop_frozen ? "FROZEN" : "FREEZE", a_y0 + a_step,
+                    ButtonVariant::Info, can_prepare,
+                    [&]() { ApplyModeUpdate(engine::act_freeze(mode_)); });
 
         // Level up
         int lvl_cost = engine::session(mode_).player_.level * 5 + 5;
         std::string level_lbl = "LEVEL " + std::to_string(lvl_cost) + "G";
         draw_action(level_lbl.c_str(), a_y0 + 2.0f * a_step,
-                    Color{30, 60, 140, 255}, Color{40, 80, 180, 255},
-                    can_prepare,
+                    ButtonVariant::Info, can_prepare,
                     [&]() { ApplyModeUpdate(engine::act_level(mode_)); });
 
         // Drag a board unit onto the bottom strip to sell it — releasing
@@ -2204,25 +2131,16 @@ void GameApp::DrawGame2D() {
     // economy readout (middle), phase/ready button (right) — drawn here so it
     // floats bright over the dim.
     {
-        Vector2 mouse_top = GetMousePosition();
+        // Non-interactive HUD panel — square corners to match the buttons.
         auto draw_floating = [&](Rectangle r, Color bg) {
-            DrawRectangleRounded(r, 0.3f, 6, bg);
-            DrawRectangleRoundedLinesEx(r, 0.3f, 6, 1.0f,
-                                        Color{50, 50, 60, 255});
+            DrawRectangleRec(r, bg);
+            DrawRectangleLinesEx(r, 1.0f, Color{50, 50, 60, 255});
         };
 
-        // -- Left: exit to main menu (red by default) --
+        // -- Left: exit to main menu (red) --
         Rectangle exit_btn{14.0f, (float)top_y, panel_w, (float)top_h};
-        bool exit_hover = CheckCollisionPointRec(mouse_top, exit_btn);
-        draw_floating(exit_btn, exit_hover ? Color{180, 60, 60, 255}
-                                           : Color{130, 40, 44, 255});
-        {
-            int tw = MeasureGameText("MENU", 16, true);
-            DrawGameText("MENU",
-                         (int)(exit_btn.x + exit_btn.width / 2 - tw / 2.0f),
-                         top_y + 9, 16, WHITE, true);
-        }
-        if (exit_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (DrawButton(ButtonText(), exit_btn, "MENU",
+                       {ButtonVariant::Danger, 16})) {
             state_ = GameState::MainMenu;
             menu_transition_cooldown_ = 0.2f;
             is_slot_menu_ = false;
@@ -2269,6 +2187,7 @@ void GameApp::DrawGame2D() {
         // --
         Rectangle ready_btn{right_x, (float)top_y, panel_w, (float)top_h};
         if (engine::is_combat(mode_)) {
+            // Combat in progress — a status indicator, not a clickable button.
             draw_floating(ready_btn, Color{150, 40, 40, 255});
             int tw = MeasureGameText("COMBAT", 16, true);
             DrawGameText("COMBAT", (int)(right_x + panel_w / 2 - tw / 2.0f),
@@ -2283,21 +2202,12 @@ void GameApp::DrawGame2D() {
                 button_text = (local_ready ? "CANCEL (" : "READY (") +
                               std::to_string(ready_count) + "/2)";
             }
-            bool hover = CheckCollisionPointRec(mouse_top, ready_btn);
-            Color btn_color;
-            if (local_ready) {
-                btn_color =
-                    hover ? Color{200, 140, 40, 255} : Color{160, 110, 30, 255};
-            } else {
-                btn_color =
-                    hover ? Color{40, 140, 55, 255} : Color{30, 110, 45, 255};
-            }
-            draw_floating(ready_btn, btn_color);
-            int tw = MeasureGameText(button_text.c_str(), 16, true);
-            DrawGameText(button_text.c_str(),
-                         (int)(right_x + panel_w / 2 - tw / 2.0f), top_y + 9,
-                         16, WHITE, true);
-            if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            // Readied -> warning (amber) so cancelling reads clearly; otherwise
+            // primary (green) to start combat.
+            ButtonVariant variant =
+                local_ready ? ButtonVariant::Warning : ButtonVariant::Primary;
+            if (DrawButton(ButtonText(), ready_btn, button_text.c_str(),
+                           {variant, 16})) {
                 if (local_ready) {
                     ApplyModeUpdate(engine::cancel_ready(mode_));
                 } else {
@@ -2489,16 +2399,9 @@ void GameApp::DrawGame2D() {
         int ok_x = 640 - ok_w / 2;
         int ok_y = box_y + 140;
 
-        bool hover = CheckCollisionPointRec(
-            GetMousePosition(),
-            {(float)ok_x, (float)ok_y, (float)ok_w, (float)ok_h});
-        DrawRectangle(ok_x, ok_y, ok_w, ok_h,
-                      hover ? Color{50, 50, 60, 255} : Color{40, 40, 50, 255});
-        DrawRectangleLines(ok_x, ok_y, ok_w, ok_h, GRAY);
-        DrawGameText("OK", ok_x + ok_w / 2 - MeasureGameText("OK", 16) / 2,
-                     ok_y + 10, 16, WHITE);
-
-        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (DrawButton(ButtonText(),
+                       {(float)ok_x, (float)ok_y, (float)ok_w, (float)ok_h},
+                       "OK", {ButtonVariant::Neutral, 16})) {
             ApplyModeUpdate(engine::acknowledge_result(mode_));
         }
     }
@@ -2514,6 +2417,19 @@ void GameApp::DrawGameText(const char *text, int posX, int posY, int fontSize,
         DrawTextEx(font, text, {(float)posX, (float)posY}, (float)fontSize,
                    1.0f, color);
     }
+}
+
+const TextRenderer &GameApp::ButtonText() {
+    if (!button_text_.draw) {
+        button_text_.measure = [this](const char *t, int size, bool bold) {
+            return MeasureGameText(t, size, bold);
+        };
+        button_text_.draw = [this](const char *t, int x, int y, int size,
+                                   Color color, bool bold) {
+            DrawGameText(t, x, y, size, color, bold);
+        };
+    }
+    return button_text_;
 }
 
 int GameApp::MeasureGameText(const char *text, int fontSize, bool bold) {

@@ -20,6 +20,7 @@ endif()
 
 add_executable(Synera
     src/main.cpp
+    src/gui/Button.cpp
     src/gui/GameApp.cpp
     src/gui/InputBox.cpp
 )

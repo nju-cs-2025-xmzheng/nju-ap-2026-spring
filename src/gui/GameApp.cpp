@@ -731,8 +731,7 @@ void GameApp::Update() {
                     }
 
                     // Cast skill trigger
-                    if (stats.mana < v.last_mana &&
-                        v.last_mana >= stats.max_mana) {
+                    if (stats.mana < v.last_mana) {
                         v.cast_time = 0.0f;
                         // Spawn the element-appropriate skill effect.
                         if (auto target_opt =

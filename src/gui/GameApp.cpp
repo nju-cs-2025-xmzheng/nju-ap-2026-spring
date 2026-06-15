@@ -24,6 +24,13 @@ namespace {
 constexpr int kVirtualWidth = 1280;
 constexpr int kVirtualHeight = 720;
 
+// 3D scene supersampling factor (anti-aliasing): the scene is rendered into a
+// texture N times larger, then minified back when blitted. Tunable; 1 = off.
+constexpr float kSceneSupersample = 4.0f;
+// Cap on the supersampled texture's longest side to avoid VRAM/fill blowups on
+// very large windows (the effective factor is scaled down past this).
+constexpr int kSceneMaxDim = 7680;
+
 constexpr const char *kDefaultMultiplayerHost = "0.0.0.0";
 constexpr std::uint16_t kDefaultMultiplayerPort = 39090;
 constexpr const char *kDefaultMultiplayerAddress = "0.0.0.0:39090";
@@ -225,7 +232,7 @@ std::string EquipmentEffect(const unit::Equipment &eq) {
 GameApp::GameApp() {
     // 1. Initialize Raylib window (resizable; content is letterboxed to the
     //    fixed 1280x720 virtual resolution).
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     InitWindow(kVirtualWidth, kVirtualHeight, "Synera: Slime Tactics");
     SetWindowMinSize(640, 360);
     SetExitKey(KEY_NULL);
@@ -431,12 +438,19 @@ void GameApp::UpdateViewport() {
     const int vh = static_cast<int>(kVirtualHeight * view_scale_);
     view_offset_ = {(sw - vw) * 0.5f, (sh - vh) * 0.5f};
 
-    // Keep the 3D scene target at the letterbox's native pixel size so it stays
-    // crisp; only reallocate when the size actually changes.
-    if (vw != scene_target_.texture.width ||
-        vh != scene_target_.texture.height) {
+    // Keep the 3D scene target at the letterbox's native pixel size, scaled by
+    // the supersampling factor (anti-aliasing) and clamped so the longest side
+    // stays within kSceneMaxDim. Only reallocate when the size changes.
+    float ss = kSceneSupersample;
+    if (vw * ss > kSceneMaxDim)
+        ss = static_cast<float>(kSceneMaxDim) /
+             vw; // vw is the longer side (16:9)
+    const int tw = std::max(static_cast<int>(vw * ss), 1);
+    const int th = std::max(static_cast<int>(vh * ss), 1);
+    if (tw != scene_target_.texture.width ||
+        th != scene_target_.texture.height) {
         UnloadRenderTexture(scene_target_);
-        scene_target_ = LoadRenderTexture(std::max(vw, 1), std::max(vh, 1));
+        scene_target_ = LoadRenderTexture(tw, th);
         SetTextureFilter(scene_target_.texture, TEXTURE_FILTER_BILINEAR);
     }
 

@@ -51,6 +51,9 @@ class GameApp {
   private:
     void Update();
     void Draw();
+    // Recompute letterbox scaling for a resizable window and map the mouse back
+    // into the fixed 1280x720 virtual coordinate space.
+    void UpdateViewport();
 
     // Coordinate conversion helpers
     Vector3 GetHexWorldPos(engine::HexCoord coord);
@@ -123,6 +126,14 @@ class GameApp {
     Camera3D camera_;
     Vector3 target_cam_pos_;
     Vector3 target_cam_target_;
+
+    // Resizable-window letterbox state. The game is authored against a fixed
+    // 1280x720 virtual resolution; scene_target_ holds the 3D scene at the
+    // letterbox's native pixel size (kept sharp), while
+    // view_scale_/view_offset_ map that virtual space into the actual window.
+    RenderTexture2D scene_target_{};
+    float view_scale_ = 1.0f;
+    Vector2 view_offset_ = {0.0f, 0.0f};
 
     // 3D Models and Fonts
     Model hex_model_;

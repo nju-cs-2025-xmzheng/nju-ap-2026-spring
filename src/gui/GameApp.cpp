@@ -19,6 +19,11 @@ using namespace Synera::unit;
 
 namespace {
 
+// Fixed virtual resolution the entire UI/3D scene is authored against. The
+// window may be resized freely; everything is letterboxed to this aspect.
+constexpr int kVirtualWidth = 1280;
+constexpr int kVirtualHeight = 720;
+
 constexpr const char *kDefaultMultiplayerHost = "0.0.0.0";
 constexpr std::uint16_t kDefaultMultiplayerPort = 39090;
 constexpr const char *kDefaultMultiplayerAddress = "0.0.0.0:39090";
@@ -218,12 +223,19 @@ std::string EquipmentEffect(const unit::Equipment &eq) {
 }
 
 GameApp::GameApp() {
-    // 1. Initialize Raylib window
-    const int screenWidth = 1280;
-    const int screenHeight = 720;
-    InitWindow(screenWidth, screenHeight, "Synera: Slime Tactics");
+    // 1. Initialize Raylib window (resizable; content is letterboxed to the
+    //    fixed 1280x720 virtual resolution).
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    InitWindow(kVirtualWidth, kVirtualHeight, "Synera: Slime Tactics");
+    SetWindowMinSize(640, 360);
     SetExitKey(KEY_NULL);
     SetTargetFPS(60);
+
+    // Off-screen target for the 3D scene, rendered at the letterbox's native
+    // pixel size so it stays sharp when the window grows. Sized in
+    // UpdateViewport(); start at the virtual resolution.
+    scene_target_ = LoadRenderTexture(kVirtualWidth, kVirtualHeight);
+    SetTextureFilter(scene_target_.texture, TEXTURE_FILTER_BILINEAR);
 
     // 2. Initialize Camera
     camera_.position = {0.0f, 80.0f, -10.0f};
@@ -396,14 +408,43 @@ GameApp::~GameApp() {
     }
     if (canopy_icon_.id != 0)
         UnloadTexture(canopy_icon_);
+    UnloadRenderTexture(scene_target_);
     CloseWindow();
 }
 
 void GameApp::Run() {
     while (!WindowShouldClose() && !exit_flag_) {
+        UpdateViewport();
         Update();
         Draw();
     }
+}
+
+void GameApp::UpdateViewport() {
+    const int sw = GetScreenWidth();
+    const int sh = GetScreenHeight();
+
+    // Largest uniform scale that fits 1280x720 inside the window (letterbox).
+    view_scale_ = std::min(static_cast<float>(sw) / kVirtualWidth,
+                           static_cast<float>(sh) / kVirtualHeight);
+    const int vw = static_cast<int>(kVirtualWidth * view_scale_);
+    const int vh = static_cast<int>(kVirtualHeight * view_scale_);
+    view_offset_ = {(sw - vw) * 0.5f, (sh - vh) * 0.5f};
+
+    // Keep the 3D scene target at the letterbox's native pixel size so it stays
+    // crisp; only reallocate when the size actually changes.
+    if (vw != scene_target_.texture.width ||
+        vh != scene_target_.texture.height) {
+        UnloadRenderTexture(scene_target_);
+        scene_target_ = LoadRenderTexture(std::max(vw, 1), std::max(vh, 1));
+        SetTextureFilter(scene_target_.texture, TEXTURE_FILTER_BILINEAR);
+    }
+
+    // Make GetMousePosition() report virtual coordinates so every existing hit
+    // test keeps working unchanged: virtual = (raw - offset) / scale.
+    SetMouseOffset(static_cast<int>(-view_offset_.x),
+                   static_cast<int>(-view_offset_.y));
+    SetMouseScale(1.0f / view_scale_, 1.0f / view_scale_);
 }
 
 void GameApp::ApplyModeUpdate(const engine::ModeUpdate &update) {
@@ -468,7 +509,8 @@ Vector3 GameApp::GetWorldPos(engine::Coord coord) {
 }
 
 std::pair<engine::Coord, bool> GameApp::GetCellUnderMouse() {
-    Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
+    Ray ray = GetScreenToWorldRayEx(GetMousePosition(), camera_, kVirtualWidth,
+                                    kVirtualHeight);
 
     // Find intersection with the horizontal grid plane (Y = 0)
     if (ray.direction.y >= 0) {
@@ -1238,7 +1280,8 @@ void GameApp::HandleInputs() {
     has_hover_ = false;
 
     if (!over_ui) {
-        Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
+        Ray ray = GetScreenToWorldRayEx(GetMousePosition(), camera_,
+                                        kVirtualWidth, kVirtualHeight);
         if (ray.direction.y < 0) {
             float t = -ray.position.y / ray.direction.y;
             Vector3 hit =
@@ -1313,7 +1356,9 @@ void GameApp::HandleInputs() {
                 auto src_u =
                     get_unit(engine::session(mode_).board_, drag_source_);
                 if (src_u && slimes_.find(src_u) != slimes_.end()) {
-                    Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
+                    Ray ray =
+                        GetScreenToWorldRayEx(GetMousePosition(), camera_,
+                                              kVirtualWidth, kVirtualHeight);
                     if (ray.direction.y < 0) {
                         float t = -ray.position.y / ray.direction.y;
                         Vector3 hit = Vector3Add(
@@ -1357,15 +1402,36 @@ void GameApp::ProcessCombatTick() {
 }
 
 void GameApp::Draw() {
-    BeginDrawing();
+    // 1. Render the 3D scene into the native-resolution letterbox target. Its
+    //    16:9 size makes BeginMode3D pick the correct projection aspect.
+    BeginTextureMode(scene_target_);
     ClearBackground(Color{24, 24, 28, 255}); // modern dark theme background
-
-    // 1. Draw 3D elements
     BeginMode3D(camera_);
     DrawGame3D();
     EndMode3D();
+    EndTextureMode();
 
-    // 2. Draw 2D UI overlay based on state
+    BeginDrawing();
+    ClearBackground(BLACK); // letterbox bars
+
+    // 2. Blit the 3D scene 1:1 into the letterbox region (no upscaling blur).
+    Rectangle scene_src{0.0f, 0.0f,
+                        static_cast<float>(scene_target_.texture.width),
+                        -static_cast<float>(scene_target_.texture.height)};
+    Rectangle scene_dst{view_offset_.x, view_offset_.y,
+                        kVirtualWidth * view_scale_,
+                        kVirtualHeight * view_scale_};
+    DrawTexturePro(scene_target_.texture, scene_src, scene_dst, {0, 0}, 0.0f,
+                   WHITE);
+
+    // 3. Draw the 2D UI overlay in virtual coordinates, rasterized at the
+    //    window's native resolution (sharp text) via a scaling camera.
+    Camera2D ui_cam{};
+    ui_cam.offset = view_offset_;
+    ui_cam.target = {0.0f, 0.0f};
+    ui_cam.rotation = 0.0f;
+    ui_cam.zoom = view_scale_;
+    BeginMode2D(ui_cam);
     if (state_ == GameState::StartMenu) {
         DrawStartMenu();
     } else if (state_ == GameState::MainMenu) {
@@ -1377,6 +1443,7 @@ void GameApp::Draw() {
     } else {
         DrawGame2D();
     }
+    EndMode2D();
 
     EndDrawing();
 }
@@ -1444,7 +1511,9 @@ void GameApp::DrawGame3D() {
                 // Float sphere
                 Vector3 sphere_pos = pos;
                 if (is_dragging_equip_ && drag_equip_source_index_ == i) {
-                    Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
+                    Ray ray =
+                        GetScreenToWorldRayEx(GetMousePosition(), camera_,
+                                              kVirtualWidth, kVirtualHeight);
                     if (ray.direction.y < 0) {
                         float t = -ray.position.y / ray.direction.y;
                         sphere_pos = Vector3Add(ray.position,
@@ -1516,7 +1585,8 @@ void GameApp::DrawGame3D() {
         // Position interpolation
         Vector3 render_pos = v.current_pos;
         if (is_dragging_ && drag_source_ == v.last_coord) {
-            Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
+            Ray ray = GetScreenToWorldRayEx(GetMousePosition(), camera_,
+                                            kVirtualWidth, kVirtualHeight);
             if (ray.direction.y < 0) {
                 float t = -ray.position.y / ray.direction.y;
                 render_pos =
@@ -1997,7 +2067,8 @@ void GameApp::DrawGame2D() {
 
         Vector3 bar_3d_pos = v.current_pos;
         if (is_dragging_ && drag_source_ == v.last_coord) {
-            Ray ray = GetScreenToWorldRay(GetMousePosition(), camera_);
+            Ray ray = GetScreenToWorldRayEx(GetMousePosition(), camera_,
+                                            kVirtualWidth, kVirtualHeight);
             if (ray.direction.y < 0) {
                 float t = -ray.position.y / ray.direction.y;
                 bar_3d_pos =
@@ -2012,7 +2083,8 @@ void GameApp::DrawGame2D() {
 
         bar_3d_pos.y += (0.075f + base_scale * 2.0f) + 0.35f;
 
-        Vector2 screen_pos = GetWorldToScreen(bar_3d_pos, camera_);
+        Vector2 screen_pos = GetWorldToScreenEx(bar_3d_pos, camera_,
+                                                kVirtualWidth, kVirtualHeight);
 
         if (screen_pos.x > 0 && screen_pos.x < 1280 && screen_pos.y > 0 &&
             screen_pos.y < 720) {

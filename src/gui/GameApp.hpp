@@ -54,6 +54,9 @@ class GameApp {
     // Recompute letterbox scaling for a resizable window and map the mouse back
     // into the fixed 1280x720 virtual coordinate space.
     void UpdateViewport();
+    // The Camera2D that maps the 1280x720 virtual space into the letterboxed
+    // window; used for the 2D UI pass and shared with widgets that need it.
+    Camera2D UICamera() const;
 
     // Coordinate conversion helpers
     Vector3 GetHexWorldPos(engine::HexCoord coord);

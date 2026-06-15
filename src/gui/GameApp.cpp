@@ -461,6 +461,15 @@ void GameApp::UpdateViewport() {
     SetMouseScale(1.0f / view_scale_, 1.0f / view_scale_);
 }
 
+Camera2D GameApp::UICamera() const {
+    Camera2D cam{};
+    cam.offset = view_offset_;
+    cam.target = {0.0f, 0.0f};
+    cam.rotation = 0.0f;
+    cam.zoom = view_scale_;
+    return cam;
+}
+
 void GameApp::ApplyModeUpdate(const engine::ModeUpdate &update) {
     if (!update.status.empty()) {
         status_msg_ = update.status;
@@ -1146,7 +1155,7 @@ void GameApp::DrawMultiplayerMenu() {
     DrawGameText("Address", (int)addr_bounds.x, (int)addr_bounds.y - 30, 18,
                  LIGHTGRAY, false);
     multiplayer_address_input_.SetReadOnly(connection_screen);
-    multiplayer_address_input_.Draw();
+    multiplayer_address_input_.Draw(UICamera());
 
     auto draw_connection_status = [&]() {
         std::string text =
@@ -1440,12 +1449,7 @@ void GameApp::Draw() {
 
     // 3. Draw the 2D UI overlay in virtual coordinates, rasterized at the
     //    window's native resolution (sharp text) via a scaling camera.
-    Camera2D ui_cam{};
-    ui_cam.offset = view_offset_;
-    ui_cam.target = {0.0f, 0.0f};
-    ui_cam.rotation = 0.0f;
-    ui_cam.zoom = view_scale_;
-    BeginMode2D(ui_cam);
+    BeginMode2D(UICamera());
     if (state_ == GameState::StartMenu) {
         DrawStartMenu();
     } else if (state_ == GameState::MainMenu) {

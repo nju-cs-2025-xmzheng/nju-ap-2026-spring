@@ -46,7 +46,11 @@ class InputBox {
 
     // Core loops
     void Update();
-    void Draw();
+    // `camera` is the active 2D camera the box is rendered under (defaults to
+    // identity). It is used to map the text-clip rectangle into real
+    // framebuffer pixels, since BeginScissorMode ignores the Camera2D
+    // transform.
+    void Draw(Camera2D camera = Camera2D{{0, 0}, {0, 0}, 0.0f, 1.0f});
 
     // Getters and Setters
     const std::string &GetValue() const { return value_; }

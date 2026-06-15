@@ -632,7 +632,7 @@ void InputBox::Update() {
     }
 }
 
-void InputBox::Draw() {
+void InputBox::Draw(Camera2D camera) {
     bool hovered = CheckCollisionPointRec(GetMousePosition(), bounds_);
 
     // Pick styles based on current state
@@ -662,9 +662,15 @@ void InputBox::Draw() {
         bounds_.width - style_.paddingLeft - style_.paddingRight,
         bounds_.height - style_.paddingTop - style_.paddingBottom};
 
-    // Clip text content so it doesn't leak outside viewport boundaries
-    BeginScissorMode((int)viewport.x, (int)viewport.y, (int)viewport.width,
-                     (int)viewport.height);
+    // Clip text content so it doesn't leak outside viewport boundaries. The
+    // scissor is in real framebuffer pixels and ignores the active Camera2D, so
+    // map the viewport corners through the camera first.
+    Vector2 clip_tl = GetWorldToScreen2D({viewport.x, viewport.y}, camera);
+    Vector2 clip_br = GetWorldToScreen2D(
+        {viewport.x + viewport.width, viewport.y + viewport.height}, camera);
+    BeginScissorMode((int)clip_tl.x, (int)clip_tl.y,
+                     (int)(clip_br.x - clip_tl.x),
+                     (int)(clip_br.y - clip_tl.y));
 
     std::string display_text = GetDisplayText();
     bool show_placeholder = value_.empty() && !focused_;
